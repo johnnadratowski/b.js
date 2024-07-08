@@ -2,8 +2,49 @@ import * as globals from './globals.js'
 
 import livereload, { LiveReloadServer } from 'livereload'
 import livereloadMiddleware from 'connect-livereload'
-import { Application, Response } from 'express'
+import { Application, Response as ExpressResponse } from 'express'
 
+let lrServer: LiveReloadServer
+export function startLR(app: Application, watchDir: string) {
+  console.log('Starting LiveReload')
+
+  app.use(livereloadMiddleware({ port: globals.lrPort }))
+  lrServer = livereload.createServer({}, () => {
+    console.log(`Started LiveReload on ${globals.lrPort}`)
+  })
+  lrServer.watch(watchDir)
+
+  let lrRunning = true
+  app.get('/pauseLR', (_: any, res: ExpressResponse) => {
+    console.log('Pausing Livereload')
+    if (!lrRunning) {
+      console.log('Livereload already paused')
+      res.status(400).send()
+      return
+    }
+
+    // @ts-ignore
+    lrServer.watcher.unwatch(watchDir)
+    lrRunning = false
+    console.log('Unwatching files for LiveReload')
+    res.status(204).send()
+  })
+  app.get('/startLR', (_: any, res: ExpressResponse) => {
+    console.log('Starting Livereload')
+    if (lrRunning) {
+      console.log('Livereload already started')
+      res.status(400).send()
+      return
+    }
+    console.log('Rewatching files for LiveReload')
+    // @ts-ignore
+    lrServer.watcher.add(watchDir)
+    lrRunning = true
+    console.log('Kicking off refresh')
+    lrServer.filterRefresh(watchDir[0] + 'index.html')
+    res.status(204).send()
+  })
+}
 class AssertionError extends Error {}
 class FetchError extends Error {
   status: number = 0
@@ -67,49 +108,6 @@ export async function fetchraw(
   const resp = await fetcher(url, opts, fail)
   return await resp.text()
 }
-
-let lrServer: LiveReloadServer
-export function startLR(app: Application, watchDir: string) {
-  console.log('Starting LiveReload')
-
-  app.use(livereloadMiddleware({ port: globals.lrPort }))
-  lrServer = livereload.createServer(() => {
-    console.log(`Started LiveReload on ${globals.lrPort}`)
-  })
-  lrServer.watch(watchDir)
-
-  let lrRunning = true
-  app.get('/pauseLR', (_: any, res: Response) => {
-    console.log('Pausing Livereload')
-    if (!lrRunning) {
-      console.log('Livereload already paused')
-      res.status(400).send()
-      return
-    }
-
-    // @ts-ignore
-    lrServer.watcher.unwatch(watchDir)
-    lrRunning = false
-    console.log('Unwatching files for LiveReload')
-    res.status(204).send()
-  })
-  app.get('/startLR', (_: any, res: Response) => {
-    console.log('Starting Livereload')
-    if (lrRunning) {
-      console.log('Livereload already started')
-      res.status(400).send()
-      return
-    }
-    console.log('Rewatching files for LiveReload')
-    // @ts-ignore
-    lrServer.watcher.add(watchDir)
-    lrRunning = true
-    console.log('Kicking off refresh')
-    lrServer.filterRefresh(watchDir[0] + 'index.html')
-    res.status(204).send()
-  })
-}
-
 export function strToBool(s: string | number | undefined | null): boolean {
   if (s == undefined || s == null) return false
   if (typeof s === 'number') {

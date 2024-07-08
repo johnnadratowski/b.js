@@ -122,12 +122,12 @@ const HTML_TAGS = [
 
 const isBrowser = typeof window !== 'undefined'
 
-export function B(opts = { root: null, parser: null }) {
+export function B(opts = { root: null, parser: null }): any {
   if (opts.root != null && opts.parser == null) {
     throw new Error('Must pass parser with root doc')
   }
-  let root
-  let parser = opts.parser
+  let root: any
+  let parser: any = opts.parser
   if (typeof opts.root == 'string') {
     root = parser.parse(opts.root)
   } else if (opts.root) {
@@ -140,21 +140,25 @@ export function B(opts = { root: null, parser: null }) {
     }
   }
 
-  function createRootElement(tag) {
+  function createRootElement(tag: string) {
     const isVoid =
       root.voidTag && root.voidTag.voidTags && root.voidTag.voidTags.has(tag)
     return parser.parse(isVoid ? `<${tag}/>` : `<${tag}></${tag}>`)
       .childNodes[0]
   }
 
-  function insertAdjacentElement(el, where, child) {
+  function insertAdjacentElement(
+    el: HTMLElement,
+    where: InsertPosition,
+    child: HTMLElement,
+  ) {
     if (el.insertAdjacentElement) {
       return el.insertAdjacentElement(where, child)
     }
     return el.insertAdjacentHTML(where, child.outerHTML)
   }
 
-  function b(parent, attrs) {
+  function b(parent: any, attrs?: any): any {
     if (parent && parent.hasOwnProperty('__is_b')) {
       return b(parent.el)
     }
@@ -171,7 +175,7 @@ export function B(opts = { root: null, parser: null }) {
       throw new Error(`Could not find el for b`, parent)
     }
 
-    function getChildren(cb) {
+    function getChildren(cb: any) {
       let children = typeof cb === 'function' ? cb(b.elems) : cb
       if (children == null || children == undefined) {
         children = []
@@ -183,7 +187,7 @@ export function B(opts = { root: null, parser: null }) {
       return children
     }
 
-    function build(...p) {
+    function build(...p: any) {
       let where = 'beforeend'
       if (typeof p[0] === 'string') {
         where = p.shift()
@@ -205,18 +209,13 @@ export function B(opts = { root: null, parser: null }) {
       }
 
       return {
-        children: b.add(where, parent, ...children),
+        children: b.add(where as InsertPosition, parent, ...children),
         el: parent,
-        after: (cb) => {
+        after: (cb: any) => {
           return cb(...children)
         },
-        removeChildren: () => children.forEach((c) => c.remove()),
+        removeChildren: () => children.forEach((c: HTMLElement) => c.remove()),
       }
-    }
-
-    b.changeRoot = (root, parser) => {
-      b.root = root
-      b.parser = parser
     }
 
     if (typeof attrs === 'string') {
@@ -229,21 +228,21 @@ export function B(opts = { root: null, parser: null }) {
       el: parent,
       build,
       root,
-      $(q) {
+      $(q: string) {
         return this.querySelector(q)
       },
-      $$(q) {
+      $$(q: string) {
         return this.querySelectorAll(q)
       },
-      querySelector(q) {
+      querySelector(q: string) {
         return b(this.el.querySelector(q))
       },
-      querySelectorAll(q) {
+      querySelectorAll(q: string) {
         return Array.from(this.el.querySelectorAll(q)).map(b)
       },
-      buildSelectOptions(...options) {
-        return build(({ option }) =>
-          options.map((opt) => {
+      buildSelectOptions(...options: any) {
+        return build(({ option }: any) =>
+          options.map((opt: any) => {
             if (Array.isArray(opt)) {
               return option({ value: opt[0] }, opt[1])
             }
@@ -251,28 +250,28 @@ export function B(opts = { root: null, parser: null }) {
           }),
         )
       },
-      set(attr) {
+      set(attr: any) {
         return b.set(parent, attr)
       },
-      childB(sel, attr) {
+      childB(sel: any, attr: any) {
         return b(parent.querySelector(sel), attr)
       },
-      cls(cls1, cls2, pred) {
+      cls(cls1: any, cls2: any, pred: any) {
         b.cls(parent, cls1, cls2, pred)
         return this
       },
-      removeClasses(cls) {
+      removeClasses(cls: any) {
         b.removeClasses(parent, cls)
         return this
       },
-      addClasses(cls) {
+      addClasses(cls: any) {
         b.addClasses(parent, cls)
         return this
       },
     }
 
     return new Proxy(ret, {
-      get: (target, prop) => {
+      get: (target: any, prop: any) => {
         if (target.hasOwnProperty(prop)) {
           return target[prop]
         }
@@ -282,7 +281,7 @@ export function B(opts = { root: null, parser: null }) {
         }
         return ret
       },
-      set: (target, prop, value) => {
+      set: (target: any, prop: any, value: any) => {
         if (target.hasOwnProperty(prop)) {
           target[prop] = value
         } else {
@@ -293,9 +292,10 @@ export function B(opts = { root: null, parser: null }) {
     })
   }
 
-  b.elems = {}
+  const elems: any = {}
+
   for (const tag of HTML_TAGS) {
-    b.elems[tag] = (...p) => {
+    const tagFunc = (...p: any) => {
       if (!p.length) {
         return b.elem(tag)
       }
@@ -303,7 +303,7 @@ export function B(opts = { root: null, parser: null }) {
       if (typeof p[0] === 'string') {
         ids = p.shift()
       }
-      let attrs = {}
+      let attrs: any = {}
       if (
         p.length &&
         typeof p[0] === 'object' &&
@@ -344,12 +344,14 @@ export function B(opts = { root: null, parser: null }) {
       }
       return b.elem(tag, attrs, ...p)
     }
-    b[tag] = b.elems[tag]
+    elems[tag as keyof typeof elems] = tagFunc
+    b[tag as keyof typeof b] = tagFunc
   }
+  b.elems = elems
 
   b.escape = B.escape
 
-  b.add = (where, el, ...children) => {
+  b.add = (where: InsertPosition, el: any, ...children: any) => {
     const toAdd = []
     for (const c of children) {
       let child = c
@@ -372,7 +374,12 @@ export function B(opts = { root: null, parser: null }) {
     return toAdd
   }
 
-  b.setAll = (els, attr) => {
+  b.changeRoot = (root: any, parser: any) => {
+    b.root = root
+    b.parser = parser
+  }
+
+  b.setAll = (els: any, attr: any) => {
     if (typeof els === 'string') {
       els = root.querySelectorAll(els)
     }
@@ -384,7 +391,7 @@ export function B(opts = { root: null, parser: null }) {
     }
   }
 
-  b.setAttr = (el, k, v) => {
+  b.setAttr = (el: any, k: any, v: any) => {
     if (k === 'class' || k === 'classList') {
       b.cls(el, v, true)
       return
@@ -404,76 +411,94 @@ export function B(opts = { root: null, parser: null }) {
     el[k] = v
   }
 
-  b.set = (el, attr) => {
+  b.setObj = (el: HTMLElement, k: string, v: object) => {
+    const curVal: any = el?.[k as keyof typeof el] ?? undefined
+    switch (true) {
+      case parser && k === 'style':
+        const style = Object.entries(v)
+          .map(([k, v]) => {
+            k = k.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
+            return `${k}:${v}`
+          })
+          .join(';')
+        b.setAttr(el, k, style)
+      case k === 'on':
+        for (const [innerK, innerV] of Object.entries(v)) {
+          if (Array.isArray(innerV)) {
+            el.addEventListener(innerK, innerV[0], innerV[1])
+            return
+          }
+          el.addEventListener(innerK, innerV)
+        }
+        return
+      case k === 'off':
+        for (const [innerK, innerV] of Object.entries(v)) {
+          if (Array.isArray(innerV)) {
+            el.removeEventListener(innerK, innerV[0], innerV[1])
+            continue
+          }
+          el.removeEventListener(innerK, innerV)
+        }
+        return
+      case curVal != undefined && curVal != null && typeof curVal === 'object':
+        for (const [innerK, innerV] of Object.entries(v)) {
+          if (el.hasOwnProperty(k)) {
+            curVal[innerK] = innerV
+          }
+        }
+        return
+    }
+  }
+
+  b.set = (el: HTMLElement, attr: object) => {
     if (!attr) {
       return el
     }
 
     for (const [key, v] of Object.entries(attr)) {
       const k = key === 'class' ? 'classList' : key
-      if (v === null) {
-        el.removeAttribute(k)
-        continue
-      }
-      if (k === 'classList') {
-        b.setAttr(el, k, v)
-        continue
-      }
-      if (Array.isArray(v)) {
-        if (Array.isArray(el[a])) {
+      const curVal = el?.[k as keyof typeof el] ?? undefined
+      switch (true) {
+        case v === null:
+          el.removeAttribute(k)
+          continue
+        case k === 'classList':
           b.setAttr(el, k, v)
-        } else {
+          continue
+        case typeof v === 'function':
+          if (k.startsWith('on') && (!curVal || typeof curVal === 'function')) {
+            const event = (e: Event, ...a: any) => {
+              if (!v.allowProp) {
+                e.preventDefault()
+                e.stopPropagation()
+              }
+              return v(e, ...a)
+            }
+            b.setAttr(el, k, event)
+            continue
+          }
+          b.setAttr(el, k, v)
+          continue
+        case Array.isArray(v):
+          if (Array.isArray(curVal)) {
+            b.setAttr(el, k, v)
+            continue
+          }
           b.setAttr(el, k, v.join(' '))
-        }
-        continue
-      }
-      if (typeof v === 'object') {
-        if (parser) {
-          if (k === 'style') {
-            const style = Object.entries(v)
-              .map(([k, v]) => {
-                k = k.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
-                return `${k}:${v}`
-              })
-              .join(';')
-            b.setAttr(el, k, style)
-          }
           continue
-        } else if (k === 'on') {
-          for (const [innerK, innerV] of Object.entries(v)) {
-            if (Array.isArray(innerV)) {
-              el.addEventListener(innerK, innerV[0], innerV[1])
-              continue
-            }
-            el.addEventListener(innerK, innerV)
-          }
+        case Array.isArray(curVal) && typeof v === 'string':
+          b.setAttr(el, k, v.split(','))
           continue
-        } else if (k === 'off') {
-          for (const [innerK, innerV] of Object.entries(v)) {
-            if (Array.isArray(innerV)) {
-              el.removeEventListener(innerK, innerV[0], innerV[1])
-              continue
-            }
-            el.removeEventListener(innerK, innerV)
-          }
+        case typeof v === 'object':
+          b.setObj(el, k, v)
           continue
-        }
-
-        if (typeof el[k] === 'object' && el[k] != null) {
-          for (const [innerK, innerV] of Object.entries(v)) {
-            if (el.hasOwnProperty(k)) {
-              el[k][innerK] = innerV
-            }
-          }
-          continue
-        }
       }
       b.setAttr(el, k, v)
     }
     return el
   }
 
-  b.elem = (tag, attr = {}, ...child) => {
+  b.elem = (tag: any, attr: any = {}, ...child: any) => {
     const el = root.createElement
       ? root.createElement(tag)
       : createRootElement(tag)
@@ -482,11 +507,11 @@ export function B(opts = { root: null, parser: null }) {
     return el
   }
 
-  b.addClasses = (els, cls) => {
+  b.addClasses = (els: any, cls: any) => {
     els = getEls(els)
     cls = formatClasses(cls)
     for (const el of els) {
-      for (const c of cls) {
+      for (let c of cls) {
         const pred = Array.isArray(c) ? c[1] : true
         c = Array.isArray(c) ? c[0] : c
         if (pred) {
@@ -497,10 +522,10 @@ export function B(opts = { root: null, parser: null }) {
     return els.length === 1 ? els[0] : els
   }
 
-  b.removeClasses = (els, cls) => {
+  b.removeClasses = (els: any, cls?: any) => {
     els = getEls(els)
     cls = formatClasses(cls)
-    els.forEach((el) => {
+    els.forEach((el: any) => {
       if (!cls) {
         if (el.className) {
           el.className = ''
@@ -509,7 +534,7 @@ export function B(opts = { root: null, parser: null }) {
         }
         return
       }
-      for (const c of cls) {
+      for (let c of cls) {
         const pred = Array.isArray(c) ? c[1] : true
         c = Array.isArray(c) ? c[0] : c
         if (pred) {
@@ -520,7 +545,7 @@ export function B(opts = { root: null, parser: null }) {
     return els.length === 1 ? els[0] : els
   }
 
-  function getEls(els) {
+  function getEls(els: any) {
     if (typeof els === 'string') {
       els = Array.from(root.querySelectorAll(els))
     }
@@ -530,7 +555,7 @@ export function B(opts = { root: null, parser: null }) {
     return els
   }
 
-  function formatClasses(cls) {
+  function formatClasses(cls: any) {
     if (!cls) return cls
     if (typeof cls === 'string') {
       cls = cls
@@ -554,7 +579,7 @@ export function B(opts = { root: null, parser: null }) {
     return out
   }
 
-  b.setClass = (el, cls, doSet) => {
+  b.setClass = (el: any, cls: any, doSet: any) => {
     if (doSet) {
       if (!el.classList.contains(cls)) {
         el.classList.add(cls)
@@ -584,7 +609,7 @@ export function B(opts = { root: null, parser: null }) {
    * @param {string} cls2 - The second list of classes. Can be same as cls1, or pred
    * @param {string} pred - The predicate, can be boolean or function
    */
-  b.cls = (els, cls1, cls2, pred) => {
+  b.cls = (els: any, cls1: any, cls2?: any, pred?: any) => {
     els = getEls(els)
 
     if (typeof cls2 === 'function' || typeof cls2 == 'boolean') {
@@ -606,7 +631,7 @@ export function B(opts = { root: null, parser: null }) {
     }
 
     const defaultPredicate = !cls2
-      ? (el, cls) => !el.classList.contains(cls)
+      ? (el: any, cls: any) => !el.classList.contains(cls)
       : true
 
     pred = typeof pred === 'boolean' ? pred : defaultPredicate
@@ -636,7 +661,7 @@ export function B(opts = { root: null, parser: null }) {
 }
 
 B.isBrowser = isBrowser
-B.escape = (unsafe) => {
+B.escape = (unsafe: string) => {
   if (typeof unsafe !== 'string') return unsafe
   return unsafe
     .replaceAll('&', '&amp;')
@@ -644,6 +669,10 @@ B.escape = (unsafe) => {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
+}
+
+B.allowProp = (target: any, propertyKey: string, descriptor: any) => {
+  descriptor.value.allowProp = true
 }
 
 export default B()

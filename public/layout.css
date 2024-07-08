@@ -1,0 +1,88 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+}
+*::before *::after {
+  box-sizing: border-box;
+}
+html {
+  height: 100%;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  background-color: #f7f7ff;
+  height: 100%;
+  color: #1f1f1f;
+  line-height: 1.5;
+  font-family: 'Jost';
+}
+h1 {
+  font-size: clamp(2.125rem, calc(12px + 2.75vw), 2.875rem);
+  line-height: 1.5;
+}
+h2 {
+  font-size: clamp(1.55rem, calc(12px + 2vw), 2.25rem);
+  line-height: 1.5;
+}
+h3 {
+  font-size: clamp(1.425rem, calc(12px + 1.5vw), 1.875rem);
+  line-height: 1.5;
+}
+h4 {
+  font-size: clamp(1.25rem, calc(12px + 1vw), 1.5rem);
+  line-height: 1.5;
+}
+div {
+  font-size: clamp(1.15rem, calc(12px + 0.6vw), 1.25rem);
+  line-height: 1.5;
+}
+p {
+  font-size: clamp(1.15rem, calc(12px + 0.6vw), 1.25rem);
+  line-height: 1.5;
+}
+span {
+  font-size: clamp(1rem, calc(12px + 0.4vw), 1.125rem);
+  line-height: 1.5;
+}
+label {
+  font-size: clamp(1rem, calc(12px + 0.4vw), 1.125rem);
+  line-height: 1.5;
+}
+button {
+  border: 1px solid #ef8543;
+  background-color: #f4efcd;
+  color: #ef8543;
+}
+.sticky-button {
+  position: sticky;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  margin-left: auto;
+  border: 2px solid #f4efcd;
+  border-radius: 8px;
+  background-color: #495867;
+  padding: 12px;
+  min-height: 60px;
+  color: #ef8543;
+}
+.sticky-button:hover {
+  cursor: pointer;
+  background-color: #f4efcd;
+  color: #495867;
+}
+.sticky-button i {
+  font-size: 32px;
+}
+.red {
+  color: #fe5f55;
+}
+.green {
+  color: #7eb77b;
+}
