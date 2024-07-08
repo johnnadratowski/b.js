@@ -439,7 +439,7 @@ export function B(opts = { root: null, parser: null }) {
             b.setAttr(el, k, style)
           }
           continue
-        } else if (k === 'events') {
+        } else if (k === 'on') {
           for (const [innerK, innerV] of Object.entries(v)) {
             if (Array.isArray(innerV)) {
               el.addEventListener(innerK, innerV[0], innerV[1])
@@ -448,7 +448,7 @@ export function B(opts = { root: null, parser: null }) {
             el.addEventListener(innerK, innerV)
           }
           continue
-        } else if (k === 'removeevents') {
+        } else if (k === 'off') {
           for (const [innerK, innerV] of Object.entries(v)) {
             if (Array.isArray(innerV)) {
               el.removeEventListener(innerK, innerV[0], innerV[1])
