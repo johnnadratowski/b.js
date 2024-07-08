@@ -322,12 +322,9 @@ export function B(opts = { root: null, parser: null }) {
     b.add = (where, el, ...children) => {
         const toAdd = [];
         for (const c of children) {
-            let child = c;
-            if (!child)
+            if (!c)
                 continue;
-            if (typeof c === 'function') {
-                child = c();
-            }
+            let child = typeof c === 'function' ? c() : c;
             if (!child)
                 continue;
             if (Array.isArray(child)) {
@@ -348,10 +345,8 @@ export function B(opts = { root: null, parser: null }) {
         b.root = root;
         b.parser = parser;
     };
-    b.setAll = (els, attr) => {
-        if (typeof els === 'string') {
-            els = root.querySelectorAll(els);
-        }
+    b.setAll = (elsSpec, attr) => {
+        const els = typeof elsSpec === 'string' ? root.querySelectorAll(elsSpec) : elsSpec;
         if (!els || !els.length) {
             throw new Error(`Could not find els for setall`, els);
         }
@@ -469,23 +464,25 @@ export function B(opts = { root: null, parser: null }) {
         b.add('beforeend', el, ...child);
         return el;
     };
-    b.addClasses = (els, cls) => {
-        els = getEls(els);
-        cls = formatClasses(cls);
+    b.addClasses = (elsSpec, clsSpec) => {
+        const els = getEls(elsSpec);
+        const cls = formatClasses(clsSpec);
+        if (!cls)
+            return;
         for (const el of els) {
             for (let c of cls) {
                 const pred = Array.isArray(c) ? c[1] : true;
-                c = Array.isArray(c) ? c[0] : c;
+                const cCls = Array.isArray(c) ? c[0] : c;
                 if (pred) {
-                    el.classList.add(c);
+                    el.classList.add(cCls);
                 }
             }
         }
         return els.length === 1 ? els[0] : els;
     };
-    b.removeClasses = (els, cls) => {
-        els = getEls(els);
-        cls = formatClasses(cls);
+    b.removeClasses = (elsList, clsSpec) => {
+        const els = getEls(elsList);
+        const cls = formatClasses(clsSpec);
         els.forEach((el) => {
             if (!cls) {
                 if (el.className) {
@@ -498,9 +495,9 @@ export function B(opts = { root: null, parser: null }) {
             }
             for (let c of cls) {
                 const pred = Array.isArray(c) ? c[1] : true;
-                c = Array.isArray(c) ? c[0] : c;
+                const cCls = Array.isArray(c) ? c[0] : c;
                 if (pred) {
-                    el.classList.remove(c);
+                    el.classList.remove(cCls);
                 }
             }
         });
@@ -516,7 +513,7 @@ export function B(opts = { root: null, parser: null }) {
         return els;
     }
     function formatClasses(cls) {
-        if (!cls)
+        if (cls === null || cls === undefined)
             return cls;
         if (typeof cls === 'string') {
             cls = cls
@@ -524,11 +521,9 @@ export function B(opts = { root: null, parser: null }) {
                 .map((x) => x.trim())
                 .filter((x) => x != '');
         }
-        if (!Array.isArray(cls)) {
-            cls = [cls];
-        }
+        const clsArray = !Array.isArray(cls) ? [cls] : cls;
         const out = [];
-        for (const c of cls) {
+        for (const c of clsArray) {
             if (typeof c !== 'object') {
                 out.push(c);
                 continue;
@@ -562,27 +557,27 @@ export function B(opts = { root: null, parser: null }) {
      *
      * If predicate is function, it's not used as opposite pred for last case
      *
-     * @param {string} els - Elements to toggle, can be string selector, list, or single elem
-     * @param {string} cls1 -
+     * @param {string} elsSpec - Elements to toggle, can be string selector, list, or single elem
+     * @param {string} cls1Spec -
      *  The first list of classes. Can be comma-delimited string, array, or
      *  object with pred as value and classname as key
-     * @param {string} cls2 - The second list of classes. Can be same as cls1, or pred
+     * @param {string} cls2Spec - The second list of classes. Can be same as cls1, or pred
      * @param {string} pred - The predicate, can be boolean or function
      */
-    b.cls = (els, cls1, cls2, pred) => {
-        els = getEls(els);
-        if (typeof cls2 === 'function' || typeof cls2 == 'boolean') {
-            pred = cls2;
-            cls2 = undefined;
+    b.cls = (elsSpec, cls1Spec, cls2Spec, pred) => {
+        const els = getEls(elsSpec);
+        if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
+            pred = cls2Spec;
+            cls2Spec = undefined;
         }
-        cls1 = formatClasses(cls1);
-        cls2 = formatClasses(cls2);
+        const cls1 = formatClasses(cls1Spec);
+        const cls2 = formatClasses(cls2Spec);
         if (!cls1 || !cls1.length) {
             // if no first class passed, remove all classes
             b.removeClasses(els);
             if (cls2 && cls2.length) {
                 // if second classes found with no first classes, add all second
-                b.addClasses(els, cls2);
+                b.addClasses(els, cls2Spec);
             }
             return;
         }
@@ -590,19 +585,20 @@ export function B(opts = { root: null, parser: null }) {
             ? (el, cls) => !el.classList.contains(cls)
             : true;
         pred = typeof pred === 'boolean' ? pred : defaultPredicate;
-        const predIsFunction = typeof pred === 'function';
         for (const el of els) {
             for (const cls of cls1) {
                 const c = Array.isArray(cls) ? cls[0] : cls;
-                const predVal = predIsFunction ? pred(el, c) : pred;
-                b.setClass(el, c, Array.isArray(cls) ? cls[1] : predVal);
+                const predVal = typeof pred === 'function' ? pred(el, c) : pred;
+                const finPredVal = Array.isArray(cls) ? cls[1] : predVal;
+                b.setClass(el, c, finPredVal);
             }
             if (!cls2 || !cls2.length)
                 continue;
             for (const cls of cls2) {
                 const c = Array.isArray(cls) ? cls[0] : cls;
-                const predVal = predIsFunction ? pred(el, c) : !pred;
-                b.setClass(el, c, Array.isArray(cls) ? cls[1] : predVal);
+                const predVal = typeof pred === 'function' ? pred(el, c) : !pred;
+                const finPredVal = Array.isArray(cls) ? cls[1] : predVal;
+                b.setClass(el, c, finPredVal);
                 continue;
             }
         }
