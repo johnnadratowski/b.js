@@ -1,0 +1,111 @@
+@import 'vars.less';
+@import 'widgets/toast.less';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+}
+
+*::before *::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  background-color: @white;
+  height: 100%;
+  color: @black;
+  line-height: 1.5;
+  font-family: 'Jost';
+}
+
+h1 {
+  font-size: @h1size;
+  line-height: 1.5;
+}
+h2 {
+  font-size: @h2size;
+  line-height: 1.5;
+}
+h3 {
+  font-size: @h3size;
+  line-height: 1.5;
+}
+h4 {
+  font-size: @h4size;
+  line-height: 1.5;
+}
+div {
+  font-size: @fontsize;
+  line-height: 1.5;
+}
+p {
+  font-size: @fontsize;
+  line-height: 1.5;
+}
+span {
+  font-size: @labelsize;
+  line-height: 1.5;
+}
+label {
+  font-size: @labelsize;
+  line-height: 1.5;
+}
+
+button {
+  border: 1px solid @accent;
+  background-color: @light;
+  color: @accent;
+}
+
+.sticky-button {
+  position: sticky;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  margin-left: auto;
+  border: 2px solid @light;
+  border-radius: 8px;
+  background-color: @dark;
+  padding: 12px;
+  min-height: 60px;
+  color: @accent;
+
+  &:hover {
+    cursor: pointer;
+    background-color: @light;
+    color: @dark;
+  }
+
+  i {
+    font-size: @buttonsize;
+  }
+}
+
+.red {
+  color: @error;
+}
+
+.green {
+  color: @ok;
+}
+
+.toast {
+  background-color: @error;
+}
+
+.callout {
+  color: @accent;
+  font-weight: bold;
+  font-size: @fontsize;
+}

@@ -1,0 +1,24 @@
+.card {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  flex-wrap: wrap;
+  border: 1px solid #f4efcd;
+  border-radius: 8px;
+  background-color: #495867;
+  padding: 8px;
+  color: #f7f7ff;
+}
+.card-item {
+  display: flex;
+  gap: 8px;
+}
+.card-item-title {
+  flex: 0 0 auto;
+  width: 100px;
+  color: #f4efcd;
+  font-weight: bold;
+}
+.card-item-value {
+  flex: 0 1 auto;
+}

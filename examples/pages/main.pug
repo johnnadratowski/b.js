@@ -1,0 +1,42 @@
+extends /layout.pug
+
+include /vars.pug
+include /widgets/dialog.pug
+
+block head
+  +headerIncludes('main')
+  block mainhead
+
+block body
+  header
+    section#header-left.header-section
+      h2 Prue Golf Time
+
+    section#header-middle.header-section
+
+    nav#header-right.header-section
+      i.fa-solid.fa-bars#nav-menu-button
+      menu#nav-menu
+        a(href="/").nav-item#main-page-nav-item Booked Reservations
+        a(href="/available.html").nav-item#available-page-nav-item Available Reservations
+        a(href="/courses.html").nav-item#courses-page-nav-item Courses
+        a(href="/exclusions.html").nav-item#courses-page-nav-item Excluded Dates
+        .nav-item#logout-page-nav-item Logout
+
+  section#body-section
+    block mainbody
+
+    +dialog('confirm-bot', 'Activate/Deactivate Bot')
+
+  footer
+    div#toasts
+    div#bot-info
+      div#bot-running.bot-footer
+        div#bot-running-title.bot-item-title Bot Status:
+        div#bot-running-status.bot-item-status UNKNOWN
+      div#bot-lastrun-time.bot-footer
+        div#bot-lastrun-title.bot-item-title Last Run:
+        div#bot-lastrun-status.bot-item-status UNKNOWN
+      div#bot-last-run-success.bot-footer
+        div#bot-success-title.bot-item-title Succeeded:
+        div#bot-success-status.bot-item-status UNKNOWN

@@ -1,0 +1,20 @@
+extends /main.pug
+
+include /vars.pug
+include /widgets/dialog.pug
+include /widgets/calendar.pug
+
+block vars
+  - var title = 'Prue Golf Time: Excluded Dates'
+
+block mainhead
+  +headerIncludes('exclusions', true)
+
+block mainbody
+  h1#page-title Excluded Dates
+
+  section#calendar-section
+    +calendar('excluded-calendar') 
+
+  +dialog('exclusion-confirm', 'Exclude Dates')
+    div Are you sure you want to book this time?

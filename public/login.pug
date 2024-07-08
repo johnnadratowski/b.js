@@ -1,0 +1,18 @@
+extends /layout.pug
+
+include /vars.pug
+include /widgets/dialog.pug
+
+block head
+  +headerIncludes('login')
+
+block body
+  +dialog('login', 'Login')
+    #login-form
+      #error
+      #username-form.login-form-item
+        #username-label.login-label Username:
+        input#username-input.login-input(type='text')
+      #password-form.login-form-item
+        #password-label.login-label Password:
+        input#password-input.login-input(type='password')

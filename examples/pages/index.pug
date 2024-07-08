@@ -1,0 +1,27 @@
+extends /main.pug
+
+include /vars.pug
+include /widgets/dialog.pug
+
+block vars
+  - var title = 'Prue Golf Time: Booked Reservations'
+
+block mainhead
+  +headerIncludes('index', true)
+
+block mainbody
+  h1#page-title Bookings
+
+  h2.section-title Future Bookings
+  section#bookings-future-section.bookings-section
+    | No Future Bookings Found
+
+  h2.section-title Past Bookings
+  section#bookings-past-section.bookings-section
+    | No Past Bookings Found
+
+  +dialog('cancel-time', 'Cancel Time')
+    div Are you sure you want to cancel this booking?
+
+  div.sticky-button
+    i#bookings-refresh.fa.fa-refresh

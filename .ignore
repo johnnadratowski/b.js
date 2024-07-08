@@ -1,0 +1,9 @@
+!.env
+node_modules/
+storage/
+yarn-error.log
+.env
+history.json
+.DS_Store
+/index.js
+/index.js.map

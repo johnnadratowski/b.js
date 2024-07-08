@@ -1,0 +1,29 @@
+@import 'vars.less';
+
+.card {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  flex-wrap: wrap;
+  border: 1px solid @light;
+  border-radius: 8px;
+  background-color: @dark;
+  padding: 8px;
+  color: @white;
+}
+
+.card-item {
+  display: flex;
+  gap: 8px;
+}
+
+.card-item-title {
+  flex: 0 0 auto;
+  width: 100px;
+  color: @light;
+  font-weight: bold;
+}
+
+.card-item-value {
+  flex: 0 1 auto;
+}

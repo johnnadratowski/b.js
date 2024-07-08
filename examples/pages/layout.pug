@@ -1,0 +1,30 @@
+include /vars.pug
+
+block vars
+  - var title = 'Prue Golf Time'
+
+doctype html
+html
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1.0')
+    meta(http-equiv='X-UA-Compatible', content='ie=edge')
+    title !{ title }
+
+    link(rel="stylesheet" href="https://fonts.cdnfonts.com/css/jost-3")
+    link(
+      rel='stylesheet',
+      href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900'
+    )
+
+    script(
+      src='https://kit.fontawesome.com/ff78d1d861.js',
+      crossorigin='anonymous'
+    )
+
+    +headerIncludes('layout')
+
+    block head
+
+  body
+    block body

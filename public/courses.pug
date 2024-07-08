@@ -1,0 +1,15 @@
+extends /main.pug
+
+include /vars.pug
+
+block vars
+  - var title = 'Prue Golf Time: Supported Courses'
+
+block mainhead
+  +headerIncludes('courses', true)
+
+block mainbody
+  h1#page-title Courses
+
+  section#courses-section
+    div#courses-no-courses

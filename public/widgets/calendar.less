@@ -1,0 +1,82 @@
+@import 'vars.less';
+
+.calendar {
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  color: @black;
+  font-family: Arial, sans-serif;
+  text-align: center;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: @dark;
+    padding: 10px;
+    color: @white;
+    user-select: none;
+
+    .prev-month,
+    .next-month {
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 4px;
+      color: @white;
+      font-size: @h4size;
+      @media (pointer: coarse) {
+        padding: 12px;
+        font-size: @buttonsize;
+      }
+    }
+
+    .month-year {
+      font-size: @h4size;
+      @media (pointer: coarse) {
+        font-size: @buttonsize;
+      }
+    }
+  }
+
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background-color: #f2f2f2;
+    padding: 5px;
+    font-weight: bold;
+
+    .day {
+      padding: 5px;
+    }
+  }
+
+  .dates {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    padding: 10px;
+  }
+
+  .date {
+    border-radius: 8px;
+    color: @black;
+    font-size: @h4size;
+    @media (pointer: coarse) {
+      font-size: @buttonsize;
+    }
+    user-select: none;
+  }
+
+  .disabled {
+    color: grey;
+  }
+
+  .clickable {
+    cursor: pointer;
+  }
+
+  .selected {
+    background-color: @light;
+    color: @accent;
+  }
+}

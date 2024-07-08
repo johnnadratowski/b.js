@@ -1,0 +1,10 @@
+mixin headerIncludes(name, is_mod)
+  link(rel='stylesheet', type='text/css', href=`/${name}.css`)
+  unless is_mod
+    script(src=`/${name}.js`, type='module')
+  else
+    script(type="module").
+      import OnDOMLoaded from '/#{name}.js';
+      document.addEventListener('DOMContentLoaded', () => {
+        OnDOMLoaded();
+      });

@@ -1,0 +1,30 @@
+@import 'vars.less';
+
+.toast {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+  border-bottom: 1px solid @black;
+  width: 100%;
+
+  .toast-message {
+    flex: 1 1 auto;
+    padding: 12px;
+    font-size: 20px;
+  }
+
+  .close-toast {
+    cursor: pointer;
+    padding-right: 12px;
+    font-size: @bigbuttonsize;
+    text-align: center;
+  }
+
+  .toast-warning {
+    padding-left: 12px;
+    font-size: @bigbuttonsize;
+    text-align: center;
+  }
+}

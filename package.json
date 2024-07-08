@@ -1,0 +1,38 @@
+{
+  "name": "prue-golf",
+  "version": "1.0.0",
+  "main": "./examples/index.js",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+  },
+  "scripts": {
+    "build": "./scripts/build.sh",
+    "clean": "./scripts/cleanup.sh",
+    "dev": "./scripts/dev.sh",
+    "prepare": "husky",
+    "pretty": "prettier --write .",
+    "tsc": "tsc"
+  },
+  "devDependencies": {
+    "@prettier/plugin-pug": "^3.0.0",
+    "@types/connect-livereload": "^0.6.3",
+    "@types/express": "^4.17.21",
+    "@types/livereload": "^0.9.5",
+    "@types/source-map-support": "^0.5.10",
+    "connect-livereload": "^0.6.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "husky": "^9.0.11",
+    "less": "^4.2.0",
+    "livereload": "^0.9.3",
+    "node-html-parser": "^6.1.13",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.0.3",
+    "prettier-plugin-css-order": "^2.0.1",
+    "pug": "^3.0.2",
+    "pug-cli": "^1.0.0-alpha6",
+    "source-map-support": "^0.5.21",
+    "typescript": "^5.4.5"
+  }
+}

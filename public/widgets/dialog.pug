@@ -1,0 +1,13 @@
+mixin dialog(id, title)
+  dialog(id=id)&attributes(attributes)
+    div.dialog-title
+      h3.dialog-title-text !{title}
+    div.body
+      div.dialog-content
+        block
+      div.error
+      div.buttons
+        button.cancel-button.button 
+          | Cancel
+        button.submit-button.button
+          | Submit
