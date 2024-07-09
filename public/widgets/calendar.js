@@ -1,4 +1,8 @@
-import { getStartOfDate } from '../shared/util.js'
+export function getStartOfDate(date) {
+  if (!date) date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
 
 // Opts:
 // showDate = true to highlight the selected date

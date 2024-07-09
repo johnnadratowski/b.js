@@ -301,17 +301,17 @@ export function B(opts = { root: null, parser: null }): any {
       el: parent,
       build,
       root,
-      $(q: string) {
-        return this.querySelector(q)
+      $(q: string, attr: object) {
+        return this.querySelector(q, attr)
       },
-      $$(q: string) {
-        return this.querySelectorAll(q)
+      $$(q: string, attr: object) {
+        return this.querySelectorAll(q, attr)
       },
-      querySelector(q: string) {
-        return b(this.el.querySelector(q))
+      querySelector(q: string, attr: object) {
+        return b(this.el.querySelector(q), attr)
       },
-      querySelectorAll(q: string) {
-        return Array.from(this.el.querySelectorAll(q)).map(b)
+      querySelectorAll(q: string, attr: object) {
+        return Array.from(this.el.querySelectorAll(q)).map((q) => b(q, attr))
       },
       buildSelectOptions(...options: any) {
         build(({ option }: any) =>

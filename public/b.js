@@ -264,17 +264,17 @@ export function B(opts = { root: null, parser: null }) {
             el: parent,
             build,
             root,
-            $(q) {
-                return this.querySelector(q);
+            $(q, attr) {
+                return this.querySelector(q, attr);
             },
-            $$(q) {
-                return this.querySelectorAll(q);
+            $$(q, attr) {
+                return this.querySelectorAll(q, attr);
             },
-            querySelector(q) {
-                return b(this.el.querySelector(q));
+            querySelector(q, attr) {
+                return b(this.el.querySelector(q), attr);
             },
-            querySelectorAll(q) {
-                return Array.from(this.el.querySelectorAll(q)).map(b);
+            querySelectorAll(q, attr) {
+                return Array.from(this.el.querySelectorAll(q)).map((q) => b(q, attr));
             },
             buildSelectOptions(...options) {
                 build(({ option }) => options.map((opt) => {

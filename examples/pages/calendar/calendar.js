@@ -1,11 +1,13 @@
-import b from './b.js'
+import b from '/b.js'
 import calendar from '/widgets/calendar.js'
-let calendarDate = new Date()
 
-calendar(b('#example-calendar'), {
-  dateclick(e) {
-    calendarDate = e.target.date
-    refresh()
-  },
-  disablePrevious: true,
-})
+function start() {
+  calendar(b('#example'), {
+    dateclick(e, date) {
+      alert('Got Date: ' + date)
+    },
+    disablePrevious: true,
+  })
+}
+
+export default start

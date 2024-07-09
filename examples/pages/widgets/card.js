@@ -1,4 +1,4 @@
-import { uuid, slugify } from '../shared/util.js'
+import { uuid, slugify } from '../../server/util.js'
 
 export default function card({ div }, prefix, obj, items, extra) {
   const id = obj.id ? obj.id : uuid()
