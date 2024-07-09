@@ -1,3 +1,58 @@
+const EVENTS = [
+    'onactivate',
+    'onbeforeactivate',
+    'onbeforecut',
+    'onbeforeeditfocus',
+    'onbeforeupdate',
+    'onclick',
+    'oncontrolselect',
+    'oncut',
+    'ondeactivate',
+    'ondragend',
+    'ondragleave',
+    'ondragstart',
+    'onerrorupdate',
+    'onfocus',
+    'onfocusout',
+    'onkeydown',
+    'onkeyup',
+    'onmousedown',
+    'onmouseleave',
+    'onmouseout',
+    'onmouseup',
+    'onmove',
+    'onmovestart',
+    'onpropertychange',
+    'onresize',
+    'onresizestart',
+    'ontimeerror',
+    'onafterupdate',
+    'onbeforecopy',
+    'onbeforedeactivate',
+    'onbeforepaste',
+    'onblur',
+    'oncontextmenu',
+    'oncopy',
+    'ondblclick',
+    'ondrag',
+    'ondragenter',
+    'ondragover',
+    'ondrop',
+    'onfilterchange',
+    'onfocusin',
+    'onhelp',
+    'onkeypress',
+    'onlosecapture',
+    'onmouseenter',
+    'onmousemove',
+    'onmouseover',
+    'onmousewheel',
+    'onmoveend',
+    'onpaste',
+    'onreadystatechange',
+    'onresizeend',
+    'onselectstart',
+];
 const HTML_TAGS = [
     'a',
     'abbr',
@@ -222,12 +277,13 @@ export function B(opts = { root: null, parser: null }) {
                 return Array.from(this.el.querySelectorAll(q)).map(b);
             },
             buildSelectOptions(...options) {
-                return build(({ option }) => options.map((opt) => {
+                build(({ option }) => options.map((opt) => {
                     if (Array.isArray(opt)) {
                         return option({ value: opt[0] }, opt[1]);
                     }
                     return option({ value: opt }, opt);
                 }));
+                return this;
             },
             set(attr) {
                 return b.set(parent, attr);
@@ -236,7 +292,7 @@ export function B(opts = { root: null, parser: null }) {
                 return b(parent.querySelector(sel), attr);
             },
             hasCls(...cls) {
-                return b.hasClass(parent, ...cls);
+                return b.hasCls(parent, ...cls);
             },
             cls(cls1, cls2, pred) {
                 b.cls(parent, cls1, cls2, pred);
@@ -248,6 +304,14 @@ export function B(opts = { root: null, parser: null }) {
             },
             addClasses(cls) {
                 b.addClasses(parent, cls);
+                return this;
+            },
+            on(type, listener, options) {
+                b.on(parent, type, listener, options, this);
+                return this;
+            },
+            off(type) {
+                b.off(parent, type);
                 return this;
             },
         };
@@ -344,9 +408,11 @@ export function B(opts = { root: null, parser: null }) {
         }
         return toAdd;
     };
-    b.changeRoot = (root, parser) => {
-        b.root = root;
-        b.parser = parser;
+    b.changeRoot = (newRoot, newParser) => {
+        root = newRoot;
+        parser = newParser;
+        b.root = b(root);
+        b.document = b.root;
     };
     b.setAll = (elsSpec, attr) => {
         const els = typeof elsSpec === 'string' ? root.querySelectorAll(elsSpec) : elsSpec;
@@ -375,7 +441,7 @@ export function B(opts = { root: null, parser: null }) {
         }
         el[k] = v;
     };
-    b.setObj = (el, k, v) => {
+    b.setObj = (el, k, v, bind_to) => {
         const curVal = el?.[k] ?? undefined;
         switch (true) {
             case parser && k === 'style':
@@ -387,21 +453,27 @@ export function B(opts = { root: null, parser: null }) {
                     .join(';');
                 b.setAttr(el, k, style);
             case k === 'on':
-                for (const [innerK, innerV] of Object.entries(v)) {
-                    if (Array.isArray(innerV)) {
-                        el.addEventListener(innerK, innerV[0], innerV[1]);
-                        return;
+                for (let [innerK, innerV] of Object.entries(v)) {
+                    if (innerK in EVENTS) {
+                        innerK = innerK.substring(2);
                     }
-                    el.addEventListener(innerK, innerV);
+                    if (Array.isArray(innerV)) {
+                        b.on(el, innerK, innerV[0], innerV[1], bind_to);
+                        continue;
+                    }
+                    b.on(el, innerK, innerV, null, bind_to);
                 }
                 return;
             case k === 'off':
-                for (const [innerK, innerV] of Object.entries(v)) {
+                for (let [innerK, innerV] of Object.entries(v)) {
+                    if (innerK in EVENTS) {
+                        innerK = innerK.substring(2);
+                    }
                     if (Array.isArray(innerV)) {
-                        el.removeEventListener(innerK, innerV[0], innerV[1]);
+                        b.off(el, innerK);
                         continue;
                     }
-                    el.removeEventListener(innerK, innerV);
+                    b.off(el, innerK);
                 }
                 return;
             case curVal != undefined && curVal != null && typeof curVal === 'object':
@@ -411,6 +483,40 @@ export function B(opts = { root: null, parser: null }) {
                     }
                 }
                 return;
+        }
+    };
+    b.on = (elsSpec, type, listener, options, bind_to) => {
+        const els = getEls(elsSpec);
+        for (const el of els) {
+            const event = (e, ...a) => {
+                if (!listener.allowProp) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                if (bind_to) {
+                    listener = listener.bind(bind_to);
+                }
+                return listener(e, ...a);
+            };
+            el.addEventListener(type, event, options);
+            const anyEl = el;
+            if (typeof anyEl.__events === 'undefined') {
+                anyEl.__events = {};
+            }
+            if (typeof anyEl.__events[type] === 'undefined') {
+                anyEl.__events[type] = [];
+            }
+            anyEl.__events[type].push([event, options]);
+        }
+    };
+    b.off = (elsSpec, type) => {
+        const els = getEls(elsSpec);
+        for (const el of els) {
+            const anyEl = el;
+            const toRemove = anyEl?.__events?.[type] ?? [];
+            for (const remove of toRemove) {
+                el.removeEventListener(type, remove[0], remove[1]);
+            }
         }
     };
     b.set = (el, attr) => {
@@ -428,15 +534,9 @@ export function B(opts = { root: null, parser: null }) {
                     b.setAttr(el, k, v);
                     continue;
                 case typeof v === 'function':
-                    if (k.startsWith('on') && (!curVal || typeof curVal === 'function')) {
-                        const event = (e, ...a) => {
-                            if (!v.allowProp) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            }
-                            return v.bind(attr)(e, ...a);
-                        };
-                        b.setAttr(el, k, event);
+                    if (k.toLowerCase() in EVENTS &&
+                        (!curVal || typeof curVal === 'function')) {
+                        b.on(el, k.substring(2), v, attr);
                         continue;
                     }
                     b.setAttr(el, k, v);
@@ -452,7 +552,7 @@ export function B(opts = { root: null, parser: null }) {
                     b.setAttr(el, k, v.split(','));
                     continue;
                 case typeof v === 'object':
-                    b.setObj(el, k, v);
+                    b.setObj(el, k, v, attr);
                     continue;
             }
             b.setAttr(el, k, v);
@@ -467,7 +567,7 @@ export function B(opts = { root: null, parser: null }) {
         b.add('beforeend', el, ...child);
         return el;
     };
-    b.hasClass = (elsSpec, ...cls) => {
+    b.hasCls = (elsSpec, ...cls) => {
         const els = getEls(elsSpec);
         if (!els.length)
             return false;
@@ -619,7 +719,8 @@ export function B(opts = { root: null, parser: null }) {
         }
         return els;
     };
-    b.root = root;
+    b.root = b(root);
+    b.document = b.root;
     b.parser = parser;
     return b;
 }

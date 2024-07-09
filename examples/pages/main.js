@@ -10,16 +10,13 @@ const navMenuButtonB = b('#nav-menu-button', {
   },
   onclick(e) {
     this._toggle(e)
-    const docClick = (e) => {
+    b.root.on('click', (e) => {
       if (e.target && b(e.target).hasCls('nav-item')) {
         return
       }
-      if (navMenuB.hasCls('shown')) {
-        this._toggle(e)
-        document.removeEventListener('click', docClick)
-        return
-      }
-    }
-    document.addEventListener('click', docClick)
+      if (!navMenuB.hasCls('shown')) return
+      this._toggle(e)
+      b.root.off('click')
+    })
   },
 })
