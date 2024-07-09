@@ -557,14 +557,16 @@ export function B(opts = { root: null, parser: null }): any {
     const els = getEls(elsSpec)
     for (const el of els) {
       const event = (e: Event, ...a: any) => {
+        debugger
         if (!listener.allowProp) {
           e.preventDefault()
           e.stopPropagation()
         }
-        if (bind_to) {
-          listener = listener.bind(bind_to)
+        const ret = listener.call(bind_to || el, e, ...a)
+        if (ret === 'off') {
+          b.off(el, type, listener)
         }
-        return listener(e, ...a)
+        return ret
       }
       el.addEventListener(type, event, options)
       const anyEl = el as any
@@ -574,18 +576,20 @@ export function B(opts = { root: null, parser: null }): any {
       if (typeof anyEl.__events[type] === 'undefined') {
         anyEl.__events[type] = []
       }
-      anyEl.__events[type].push([event, options])
+      anyEl.__events[type].push([event, options, listener])
     }
   }
 
-  b.off = (elsSpec: ElemSpec, type: string) => {
+  b.off = (elsSpec: ElemSpec, type: string, listener?: any) => {
     const els = getEls(elsSpec)
     for (const el of els) {
       const anyEl = el as any
       const toRemove = anyEl?.__events?.[type] ?? []
-      for (const remove of toRemove) {
-        el.removeEventListener(type, remove[0], remove[1])
-      }
+      toRemove
+        .filter((remove: any) => !listener || remove[2] == listener)
+        .forEach((remove: any) => {
+          el.removeEventListener(type, remove[0], remove[1])
+        })
     }
   }
 
@@ -809,6 +813,7 @@ export function B(opts = { root: null, parser: null }): any {
     return els
   }
 
+  b.allowProp = B.allowProp
   b.root = b(root)
   b.document = b.root
   b.parser = parser
@@ -826,8 +831,9 @@ B.escape = (unsafe: string) => {
     .replaceAll("'", '&#039;')
 }
 
-B.allowProp = (target: any, propertyKey: string, descriptor: any) => {
-  descriptor.value.allowProp = true
+B.allowProp = (func: any) => {
+  func.allowProp = true
+  return func
 }
 
 export default B()

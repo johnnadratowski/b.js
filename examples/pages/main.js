@@ -2,21 +2,20 @@ import b from './b.js'
 
 const navMenuB = b('#nav-menu')
 const navMenuButtonB = b('#nav-menu-button', {
-  _toggle(e) {
-    e.preventDefault()
-    e.stopPropagation()
+  _toggle() {
     navMenuB.cls('shown')
     navMenuButtonB.cls('rotated')
   },
-  onclick(e) {
-    this._toggle(e)
-    b.root.on('click', (e) => {
-      if (e.target && b(e.target).hasCls('nav-item')) {
+  onclick() {
+    this._toggle()
+    b.document.on('click', (e) => {
+      if (
+        (e.target && b(e.target).hasCls('nav-item')) ||
+        !navMenuB.hasCls('shown')
+      )
         return
-      }
-      if (!navMenuB.hasCls('shown')) return
-      this._toggle(e)
-      b.root.off('click')
+      this._toggle()
+      return 'off'
     })
   },
 })

@@ -489,14 +489,16 @@ export function B(opts = { root: null, parser: null }) {
         const els = getEls(elsSpec);
         for (const el of els) {
             const event = (e, ...a) => {
+                debugger;
                 if (!listener.allowProp) {
                     e.preventDefault();
                     e.stopPropagation();
                 }
-                if (bind_to) {
-                    listener = listener.bind(bind_to);
+                const ret = listener.call(bind_to || el, e, ...a);
+                if (ret === 'off') {
+                    b.off(el, type, listener);
                 }
-                return listener(e, ...a);
+                return ret;
             };
             el.addEventListener(type, event, options);
             const anyEl = el;
@@ -506,17 +508,19 @@ export function B(opts = { root: null, parser: null }) {
             if (typeof anyEl.__events[type] === 'undefined') {
                 anyEl.__events[type] = [];
             }
-            anyEl.__events[type].push([event, options]);
+            anyEl.__events[type].push([event, options, listener]);
         }
     };
-    b.off = (elsSpec, type) => {
+    b.off = (elsSpec, type, listener) => {
         const els = getEls(elsSpec);
         for (const el of els) {
             const anyEl = el;
             const toRemove = anyEl?.__events?.[type] ?? [];
-            for (const remove of toRemove) {
+            toRemove
+                .filter((remove) => !listener || remove[2] == listener)
+                .forEach((remove) => {
                 el.removeEventListener(type, remove[0], remove[1]);
-            }
+            });
         }
     };
     b.set = (el, attr) => {
@@ -719,6 +723,7 @@ export function B(opts = { root: null, parser: null }) {
         }
         return els;
     };
+    b.allowProp = B.allowProp;
     b.root = b(root);
     b.document = b.root;
     b.parser = parser;
@@ -735,8 +740,9 @@ B.escape = (unsafe) => {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
 };
-B.allowProp = (target, propertyKey, descriptor) => {
-    descriptor.value.allowProp = true;
+B.allowProp = (func) => {
+    func.allowProp = true;
+    return func;
 };
 export default B();
 //# sourceMappingURL=b.js.map
