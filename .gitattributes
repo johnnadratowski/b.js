@@ -1,3 +1,8 @@
-*.js.map        -diff
-/b.js           -diff
-BUILD           -diff
+**.js.map                  -diff
+/b.js                      -diff
+BUILD                      -diff
+/examples/index.js         -diff
+/examples/index.js.map     -diff
+/examples/server/**.js     -diff
+/examples/server/**.js.map -diff
+/public/**                 -diff

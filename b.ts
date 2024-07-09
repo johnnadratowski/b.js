@@ -557,7 +557,6 @@ export function B(opts = { root: null, parser: null }): any {
     const els = getEls(elsSpec)
     for (const el of els) {
       const event = (e: Event, ...a: any) => {
-        debugger
         if (!listener.allowProp) {
           e.preventDefault()
           e.stopPropagation()
