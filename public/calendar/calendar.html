@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Calendar</title>
+    <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/jost-3">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900">
+    <script src="https://kit.fontawesome.com/ff78d1d861.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" type="text/css" href="/layout.css"/>
+    <script src="/layout.js" type="module"></script>
+    <link rel="stylesheet" type="text/css" href="/main.css"/>
+    <script src="/main.js" type="module"></script>
+    <link rel="stylesheet" type="text/css" href="/calendar/calendar.css"/>
+    <script type="module">import OnDOMLoaded from '/calendar/calendar.js';
+      document.addEventListener('DOMContentLoaded', () => {
+        OnDOMLoaded();
+      });
+    </script>
+  </head>
+  <body>
+    <header>
+      <section class="header-section" id="header-left"><a id="header-link" href="/">
+          <h3>B.js Examples</h3></a></section>
+      <section class="header-section" id="header-middle"></section>
+      <nav class="header-section" id="header-right"><i class="fa-solid fa-bars" id="nav-menu-button"></i>
+        <menu id="nav-menu"><a class="nav-item" href="/" id="main-page-nav-item">Landing Page</a><a class="nav-item" href="/calendar/calendar.html">Calendar</a><a class="nav-item" href="/dialog/dialog.html">Dialog</a>
+        </menu>
+      </nav>
+    </header>
+    <section id="body-section">
+      <h1 id="page-title">Calendar Examples</h1>
+      <section id="calendar-section">
+        <div class="calendar" id="example">
+          <div class="header">
+            <button class="prev-month"><i class="fa-solid fa-caret-left"></i></button>
+            <h1 class="month-year"></h1>
+            <button class="next-month"><i class="fa-solid fa-caret-right"></i></button>
+          </div>
+          <div class="days">
+            <div class="day">Sun</div>
+            <div class="day">Mon</div>
+            <div class="day">Tue</div>
+            <div class="day">Wed</div>
+            <div class="day">Thu</div>
+            <div class="day">Fri</div>
+            <div class="day">Sat</div>
+          </div>
+          <div class="dates"></div>
+        </div>
+      </section>
+    </section>
+    <footer></footer>
+  </body>
+</html>

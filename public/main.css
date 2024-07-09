@@ -9,6 +9,9 @@ header {
   padding: 8px;
   color: #f7f7ff;
 }
+header #header-link {
+  text-decoration: none;
+}
 header .header-section {
   display: flex;
   flex-direction: row;
@@ -32,7 +35,7 @@ header #nav-menu-button.rotated {
 header #nav-menu {
   display: flex;
   position: absolute;
-  top: 68px;
+  top: 58px;
   right: 6px;
   flex-direction: column;
   transform: translateY(-120%);
@@ -42,7 +45,6 @@ header #nav-menu {
 }
 header #nav-menu.shown {
   transform: translateY(0);
-  z-index: 999999;
   transition-duration: 0.2s;
 }
 header .nav-item {
@@ -71,7 +73,6 @@ header .nav-item:last-child {
   flex: 1 1 auto;
   flex-direction: column;
   padding: 8px;
-  overflow: scroll;
 }
 footer {
   display: flex;

@@ -1,0 +1,16 @@
+extends /main.pug
+
+include /vars.pug
+include /widgets/calendar.pug
+
+block vars
+  - var title = 'Calendar'
+
+block mainhead
+  +headerIncludes('calendar/calendar', true)
+
+block mainbody
+  h1#page-title Calendar Examples
+
+  section#calendar-section
+    +calendar('example')

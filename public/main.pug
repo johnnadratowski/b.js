@@ -1,16 +1,17 @@
 extends /layout.pug
 
-include /vars.pug
-
 block head
   +headerIncludes('main')
   block mainhead
 
+mixin navItem(path, name)
+  a(href=`${path}.html`).nav-item= name
+
 block body
   header
     section#header-left.header-section
-      a(href="/")
-        h2 B.js Examples
+      a#header-link(href="/")
+        h3 B.js Examples
 
     section#header-middle.header-section
 
@@ -18,6 +19,8 @@ block body
       i.fa-solid.fa-bars#nav-menu-button
       menu#nav-menu
         a(href="/").nav-item#main-page-nav-item Landing Page
+        each example in exampleList
+          +navItem(example[0], example[1])
 
   section#body-section
     block mainbody

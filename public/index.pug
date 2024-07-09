@@ -1,12 +1,20 @@
 extends /main.pug
 
-include /vars.pug
-
 block vars
-  - var title = 'B.js Examples: Landing Page'
+  - var title = 'B.js Examples: Calendar'
 
 block mainhead
   +headerIncludes('index', true)
 
+mixin exampleItem(path, name)
+  li.example-item
+    a.example-link(href=`${path}.html`)
+      p.example-name= name
+
 block mainbody
-  h1#page-title B.js Examples
+  h1#page-title Examples
+
+  section#examples-section
+    ul#examples-list
+      each example in exampleList
+        +exampleItem(example[0], example[1])

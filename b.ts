@@ -273,6 +273,9 @@ export function B(opts = { root: null, parser: null }): any {
       childB(sel: any, attr: any) {
         return b(parent.querySelector(sel), attr)
       },
+      hasCls(...cls: string[]): boolean {
+        return b.hasCls(parent, ...cls)
+      },
       cls(cls1: any, cls2: any, pred: any) {
         b.cls(parent, cls1, cls2, pred)
         return this
@@ -493,7 +496,7 @@ export function B(opts = { root: null, parser: null }): any {
                 e.preventDefault()
                 e.stopPropagation()
               }
-              return v(e, ...a)
+              return v.bind(attr)(e, ...a)
             }
             b.setAttr(el, k, event)
             continue
@@ -526,6 +529,17 @@ export function B(opts = { root: null, parser: null }): any {
     b.set(el, attr)
     b.add('beforeend', el, ...child)
     return el
+  }
+
+  b.hasCls = (elsSpec: ElemSpec, ...cls: string[]): boolean => {
+    const els = getEls(elsSpec)
+    if (!els.length) return false
+    for (const el of els) {
+      for (const c of cls) {
+        if (!el.classList.contains(c)) return false
+      }
+    }
+    return true
   }
 
   b.addClasses = (elsSpec: ElemSpec, clsSpec?: ClassSpec) => {
