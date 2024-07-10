@@ -413,6 +413,9 @@ export function B(opts = { root: null, parser: null }) {
         parser = newParser;
         b.root = b(root);
         b.document = b.root;
+        if (b.document.body) {
+            b.body = b(b.document.body);
+        }
     };
     b.setAll = (elsSpec, attr) => {
         const els = typeof elsSpec === 'string' ? root.querySelectorAll(elsSpec) : elsSpec;
@@ -478,7 +481,7 @@ export function B(opts = { root: null, parser: null }) {
                 return;
             case curVal != undefined && curVal != null && typeof curVal === 'object':
                 for (const [innerK, innerV] of Object.entries(v)) {
-                    if (el.hasOwnProperty(k)) {
+                    if (innerK in curVal) {
                         curVal[innerK] = innerV;
                     }
                 }
@@ -726,6 +729,9 @@ export function B(opts = { root: null, parser: null }) {
     b.root = b(root);
     b.document = b.root;
     b.parser = parser;
+    if (b.document.body) {
+        b.body = b(b.document.body);
+    }
     return b;
 }
 B.isBrowser = isBrowser;

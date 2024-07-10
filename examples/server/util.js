@@ -287,12 +287,6 @@ export function getTimezoneOffsetString() {
     const sign = offsetMinutes > 0 ? '-' : '+';
     return `${sign}${padZero(offsetHours)}:${padZero(offsetMinutesPart)}`;
 }
-export function getStartOfDate(date = undefined) {
-    if (!date)
-        date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
-}
 export function addDays(days, date = undefined) {
     if (!date)
         date = new Date();
