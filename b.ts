@@ -608,16 +608,12 @@ export function B(opts = { root: null, parser: null }): any {
       const k = key === 'class' ? 'classList' : key
       const curVal = el?.[k as keyof typeof el] ?? undefined
 
-      const getOBVal = (obVal: OB) =>
-        obVal.use((newV: any) => {
-          b.set(el, { [k]: newV })
-        })
-
       let v = value
       if (OB.is_ob(value)) {
-        v = getOBVal(value)
+        v = value.use((newV: any) => {
+          b.set(el, { [k]: newV })
+        })
       }
-      OB.replace_ob(v, getOBVal)
 
       switch (true) {
         case v === null:
@@ -878,7 +874,7 @@ class OB {
   }
   static replace_ob(v: any, cb: any): OB[] {
     const obs: OB[] = []
-    B.recurseVar(v, (item: any, parent: any, k: any): boolean => {
+    B.recurseVar(v, (item: any, k: any, ...parentMeta: any): boolean => {
       let ob
       if (!parent || !k || !(ob = OB.is_ob(item))) {
         return false
@@ -923,16 +919,6 @@ class OB {
   use(cb: any): any {
     this.using.push(cb)
     return this.value
-  }
-}
-
-class OBRun extends OB {
-  ob: OB
-  cb: any
-  constructor(ob: OB, cb: any) {
-    super(ob._value)
-    this.ob = ob
-    this.cb = cb
   }
 }
 
@@ -1196,22 +1182,22 @@ B.arrayToObj = (obj: any, key: string, hasMultiple = false) => {
   return out
 }
 
-B.recurseVar = (var_: any, cb: any, parent?: any, key?: any) => {
+B.recurseVar = (var_: any, cb: any, key?: any, ...parent: any) => {
   if (Array.isArray(var_)) {
-    if (cb(var_, parent, key)) {
+    if (cb(var_, key, ...parent)) {
       return
     }
     for (const i in var_) {
-      B.recurseVar(var_[i], cb, var_, i)
+      B.recurseVar(var_[i], cb, i, [key, var_], ...parent)
     }
     return
   }
   if (typeof var_ === 'object') {
-    if (cb(var_, parent, key)) {
+    if (cb(var_, key, ...parent)) {
       return
     }
     for (const k of Object.keys(var_)) {
-      B.recurseVar(var_[k], cb, var_, k)
+      B.recurseVar(var_[k], cb, k, [key, var_], ...parent)
     }
   }
   if (cb(var_, key)) {

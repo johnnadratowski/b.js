@@ -19,16 +19,18 @@ mkdir ./${OUT_DIR} 2> /dev/null
 cp -r ./examples/pages/* ./${OUT_DIR}
 
 if [[ "${DEV}" == "1" ]]; then
-  pug -P -b ${OUT_DIR} ${OUT_DIR}
+  pug -P -b ${OUT_DIR} ${OUT_DIR} &
 else
-  pug -b ${OUT_DIR} ${OUT_DIR}
+  pug -b ${OUT_DIR} ${OUT_DIR} &
 fi
 
 cp ./b.js ./${OUT_DIR}
 
 for file in $(find ./${OUT_DIR} -name "*.less"); do 
-  lessc --include-path=./${OUT_DIR} "$file" "${file%.less}.css"; 
+  lessc --include-path=./${OUT_DIR} "$file" "${file%.less}.css" &
 done
+
+wait
 
 if [[ "${PRE_COMMIT}" == "" ]]; then
   echo "$(date)" > ./BUILD

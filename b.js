@@ -530,14 +530,12 @@ export function B(opts = { root: null, parser: null }) {
         for (const [key, value] of Object.entries(attr)) {
             const k = key === 'class' ? 'classList' : key;
             const curVal = el?.[k] ?? undefined;
-            const getOBVal = (obVal) => obVal.use((newV) => {
-                b.set(el, { [k]: newV });
-            });
             let v = value;
             if (OB.is_ob(value)) {
-                v = getOBVal(value);
+                v = value.use((newV) => {
+                    b.set(el, { [k]: newV });
+                });
             }
-            OB.replace_ob(v, getOBVal);
             switch (true) {
                 case v === null:
                     el.removeAttribute(k);
@@ -775,7 +773,7 @@ class OB {
     }
     static replace_ob(v, cb) {
         const obs = [];
-        B.recurseVar(v, (item, parent, k) => {
+        B.recurseVar(v, (item, k, ...parentMeta) => {
             let ob;
             if (!parent || !k || !(ob = OB.is_ob(item))) {
                 return false;
@@ -820,15 +818,6 @@ class OB {
     use(cb) {
         this.using.push(cb);
         return this.value;
-    }
-}
-class OBRun extends OB {
-    ob;
-    cb;
-    constructor(ob, cb) {
-        super(ob._value);
-        this.ob = ob;
-        this.cb = cb;
     }
 }
 B.ob = (v) => {
@@ -1055,22 +1044,22 @@ B.arrayToObj = (obj, key, hasMultiple = false) => {
     }
     return out;
 };
-B.recurseVar = (var_, cb, parent, key) => {
+B.recurseVar = (var_, cb, key, ...parent) => {
     if (Array.isArray(var_)) {
-        if (cb(var_, parent, key)) {
+        if (cb(var_, key, ...parent)) {
             return;
         }
         for (const i in var_) {
-            B.recurseVar(var_[i], cb, var_, i);
+            B.recurseVar(var_[i], cb, i, [key, var_], ...parent);
         }
         return;
     }
     if (typeof var_ === 'object') {
-        if (cb(var_, parent, key)) {
+        if (cb(var_, key, ...parent)) {
             return;
         }
         for (const k of Object.keys(var_)) {
-            B.recurseVar(var_[k], cb, var_, k);
+            B.recurseVar(var_[k], cb, k, [key, var_], ...parent);
         }
     }
     if (cb(var_, key)) {
