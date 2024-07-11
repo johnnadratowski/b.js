@@ -158,31 +158,6 @@ export function joinMargin(template: string[], ...expressions: any[]) {
   return result.replace(/(\n|\r|\r\n)\s*\|/g, '  ')
 }
 
-export function slugify(str: string, replace = '-') {
-  return str
-    .toString() // Cast to string (optional)
-    .normalize('NFKD') // The normalize() using NFKD method returns the Unicode Normalization Form of a given string.
-    .toLowerCase() // Convert the string to lowercase letters
-    .trim() // Remove whitespace from both sides of a string (optional)
-    .replace(/[^\w\s-]/g, '') // remove non-word [a-z0-9_], non-whitespace, non-hyphen characters
-    .replace(/[\s_-]+/g, replace) // swap any length of whitespace, underscore, hyphen characters with replace
-    .replace(/^-+|-+$/g, '') // remove leading, trailing -
-}
-
-export function unslugify(
-  str: string,
-  replace: RegExp | string | undefined = undefined,
-) {
-  if (!replace) {
-    replace = /\-/g
-  }
-  return str
-    .replace(replace, ' ')
-    .replace(
-      /\w\S*/g,
-      (text) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(),
-    )
-}
 export function titleize(str: string, splits = /[\s_-]+/) {
   return str
     .split(splits)
@@ -200,31 +175,6 @@ export const validateEmail = (email: string) => {
     )
 }
 
-export function throttle(cb: any, delay = 1000) {
-  let shouldWait = false
-  let waitingArgs: any
-  const timeoutFunc = () => {
-    if (waitingArgs == null) {
-      shouldWait = false
-    } else {
-      cb(...waitingArgs)
-      waitingArgs = null
-      setTimeout(timeoutFunc, delay)
-    }
-  }
-
-  return (...args: any[]) => {
-    if (shouldWait) {
-      waitingArgs = args
-      return
-    }
-
-    cb(...args)
-    shouldWait = true
-    setTimeout(timeoutFunc, delay)
-  }
-}
-
 export function isJSON(str: string) {
   try {
     JSON.parse(str)
@@ -232,16 +182,6 @@ export function isJSON(str: string) {
     return false
   }
   return true
-}
-
-export function debounce(this: any, func: any, timeout = 300) {
-  let timer: any
-  return (...args: any[]) => {
-    clearTimeout(timer)
-    timer = setTimeout(() => {
-      func.apply(this, args)
-    }, timeout)
-  }
 }
 
 export async function asyncDo({ run, until, then, wait = 50 }: any = {}) {

@@ -195,14 +195,10 @@ type Predicate = boolean | PredicateFunc
 
 const isBrowser = typeof window !== 'undefined'
 
-export function B(opts = { root: null, parser: null }): any {
-  if (opts.root != null && opts.parser == null) {
-    throw new Error('Must pass parser with root doc')
-  }
+function getRoot(opts: any): any {
   let root: any
-  let parser: any = opts.parser
   if (typeof opts.root == 'string') {
-    root = parser.parse(opts.root)
+    root = opts.parser.parse(opts.root)
   } else if (opts.root) {
     root = opts.root
   }
@@ -212,6 +208,15 @@ export function B(opts = { root: null, parser: null }): any {
       root = window.document
     }
   }
+  return root
+}
+
+export function B(opts = { root: null, parser: null }): any {
+  if (opts.root != null && opts.parser == null) {
+    throw new Error('Must pass parser with root doc')
+  }
+  let parser: any = opts.parser
+  let root = getRoot(opts)
 
   function createRootElement(tag: string) {
     const isVoid =
@@ -232,13 +237,14 @@ export function B(opts = { root: null, parser: null }): any {
   }
 
   function b(parent: any, attrs?: any): any {
-    if (parent && parent.hasOwnProperty('__is_b')) {
-      return b(parent.el)
-    }
     if (!parent) {
       parent = isBrowser
         ? document.body
         : parser.parse('<div id="b-root"></div>')
+    }
+
+    if (B.is_b(parent)) {
+      return b(parent.el)
     }
 
     if (typeof parent === 'string') {
@@ -254,10 +260,11 @@ export function B(opts = { root: null, parser: null }): any {
         children = []
       }
       if (typeof children === 'string') {
-        children = [b.elems['div']({ innerHTML: children })]
+        children = Array.from(
+          b.elems['div']({ innerHTML: children }).children(),
+        )
       }
-      children = !Array.isArray(children) ? [children] : children
-      return children
+      return !Array.isArray(children) ? [children] : children
     }
 
     function build(...p: any) {
@@ -388,43 +395,34 @@ export function B(opts = { root: null, parser: null }): any {
       if (typeof p[0] === 'string') {
         ids = p.shift()
       }
-      let attrs: any = {}
-      if (
+      const isAttrs =
         p.length &&
-        typeof p[0] === 'object' &&
+        p[0] !== null &&
+        p[0] !== undefined &&
         !(isBrowser && p[0] instanceof HTMLElement) &&
         !Array.isArray(p[0]) &&
-        !(typeof p[0] === 'function') &&
-        !(p[0] === null || p[0] === undefined)
-      ) {
+        !(OB.is_ob(p[0]) && typeof (p[0] as OB).value !== 'object') &&
+        typeof p[0] === 'object'
+
+      let attrs: any = {}
+      if (isAttrs) {
         attrs = p.shift()
       }
       if (ids.length) {
-        for (const id of ids.split(/\s+/)) {
-          if (id.startsWith('#')) {
-            if (attrs.id) {
-              throw new Error(
-                `Object already has an ID ${attrs.id}.  Tried to set to ${id}`,
-              )
-            }
-            attrs.id = id.substring(1)
-            continue
-          }
-
-          if (id.startsWith('.')) {
-            if (attrs.class === null || attrs.class === undefined) {
-              attrs.class = ''
-            }
-            attrs.class += ` ${id.substring(1)}`
-          }
-        }
+        attrs = B.setClsString(
+          OB.is_ob(attrs) ? (attrs as OB).value : attrs,
+          ids,
+        )
       }
-      if (
+
+      const isInnerHTML =
         p.length &&
-        !(isBrowser && p[0] instanceof HTMLElement) &&
-        !Array.isArray(p[0]) &&
-        !(typeof p[0] === 'function')
-      ) {
+        p[0] !== null &&
+        p[0] !== undefined &&
+        (typeof p[0] === 'string' ||
+          (OB.is_ob(p[0]) && typeof (p[0] as OB).value === 'string'))
+
+      if (isInnerHTML) {
         attrs.innerHTML = p.shift()
       }
       return b.elem(tag, attrs, ...p)
@@ -435,7 +433,7 @@ export function B(opts = { root: null, parser: null }): any {
 
   b.elems = elems
 
-  b.escape = B.escape
+  b.escape = B.escapeHTML
 
   b.add = (
     where: InsertPosition,
@@ -600,9 +598,27 @@ export function B(opts = { root: null, parser: null }): any {
       return el
     }
 
-    for (const [key, v] of Object.entries(attr)) {
+    if (OB.is_ob(attr)) {
+      attr = (attr as OB).use((newAttr: object) => {
+        b.set(el, newAttr)
+      })
+    }
+
+    for (const [key, value] of Object.entries(attr)) {
       const k = key === 'class' ? 'classList' : key
       const curVal = el?.[k as keyof typeof el] ?? undefined
+
+      const getOBVal = (obVal: OB) =>
+        obVal.use((newV: any) => {
+          b.set(el, { [k]: newV })
+        })
+
+      let v = value
+      if (OB.is_ob(value)) {
+        v = getOBVal(value)
+      }
+      OB.replace_ob(v, getOBVal)
+
       switch (true) {
         case v === null:
           el.removeAttribute(k)
@@ -711,12 +727,11 @@ export function B(opts = { root: null, parser: null }): any {
 
   function formatClasses(cls: ClassSpec): ClassFormatted {
     if (cls === null || cls === undefined) return cls
+
     if (typeof cls === 'string') {
-      cls = cls
-        .split(' ')
-        .map((x) => x.trim())
-        .filter((x) => x != '')
+      cls = B.splitClsString(cls)
     }
+
     const clsArray = !Array.isArray(cls) ? [cls] : cls
     const out = []
     for (const c of clsArray) {
@@ -815,7 +830,30 @@ export function B(opts = { root: null, parser: null }): any {
     return els
   }
 
+  b.B = B
+  b.ob = B.ob
+  b.isBrowser = B.isBrowser
+  b.escapeHTML = B.escapeHTML
+  b.splitClsString = B.splitClsString
+  b.setClsString = B.setClsString
+  b.debounce = B.debounce
+  b.throttle = B.throttle
   b.allowProp = B.allowProp
+  b.slugify = B.slugify
+  b.unslugify = B.unslugify
+  b.stripMargin = B.stripMargin
+  b.joinMargin = B.joinMargin
+  b.titleize = B.titleize
+  b.capitalize = B.capitalize
+  b.uuid = B.uuid
+  b.validateEmail = B.validateEmail
+  b.isJSON = B.isJSON
+  b.strToBool = B.strToBool
+  b.assert = B.assert
+  b.asyncUntil = B.asyncUntil
+  b.arrayToObj = B.arrayToObj
+  b.recurseVar = B.recurseVar
+  b.arrayChunk = B.arrayChunk
   b.root = b(root)
   b.document = b.root
   b.parser = parser
@@ -825,8 +863,89 @@ export function B(opts = { root: null, parser: null }): any {
   return b
 }
 
+class OB {
+  __is_ob = true
+  _value = null
+  using: any = []
+  cb: any | undefined
+  children: OB[] = []
+  constructor(value: any, cb?: any) {
+    this._value = value
+    this.cb = cb
+  }
+  static is_ob(v: any): OB | null {
+    return v && v.hasOwnProperty('__is_ob') ? (v as OB) : null
+  }
+  static replace_ob(v: any, cb: any): OB[] {
+    const obs: OB[] = []
+    B.recurseVar(v, (item: any, parent: any, k: any): boolean => {
+      let ob
+      if (!parent || !k || !(ob = OB.is_ob(item))) {
+        return false
+      }
+      parent[k] = cb(ob)
+      obs.push(ob)
+      return false
+    })
+    return obs
+  }
+  static getValue(ob: OB, v: any): any {
+    if (!ob.cb) return v
+
+    if (typeof ob.cb === 'function') {
+      return ob.cb(v)
+    } else if (typeof ob.cb === 'string') {
+      return ob.cb.replace('${}', v ? v.toString() : '')
+    } else {
+      throw new Error(
+        `Unexpected type for observable transform: ${typeof ob.cb}`,
+      )
+    }
+  }
+  get value() {
+    return OB.getValue(this, this._value)
+  }
+  set value(newV: any) {
+    const oldV = this.value
+    this._value = OB.getValue(this, newV)
+    for (const use of this.using) {
+      use(this._value, oldV)
+    }
+    for (const child of this.children) {
+      child.value = newV
+    }
+  }
+  as(cb: any): any {
+    const child = new OB(this.value, cb)
+    this.children.push(child)
+    return child
+  }
+  use(cb: any): any {
+    this.using.push(cb)
+    return this.value
+  }
+}
+
+class OBRun extends OB {
+  ob: OB
+  cb: any
+  constructor(ob: OB, cb: any) {
+    super(ob._value)
+    this.ob = ob
+    this.cb = cb
+  }
+}
+
+B.ob = (v: any): OB => {
+  return new OB(v)
+}
+
+B.is_b = (is_b: any) => {
+  return is_b && is_b.hasOwnProperty('__is_b')
+}
+
 B.isBrowser = isBrowser
-B.escape = (unsafe: string) => {
+B.escapeHTML = (unsafe: string) => {
   if (typeof unsafe !== 'string') return unsafe
   return unsafe
     .replaceAll('&', '&amp;')
@@ -835,10 +954,277 @@ B.escape = (unsafe: string) => {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
 }
+B.splitClsString = (cls: string): string[] => {
+  return cls
+    .split(/[\s,]+/)
+    .map((x) => x.trim())
+    .filter((x) => x != '')
+}
+B.setClsString = (attrs: any, ids: string) => {
+  for (const id of B.splitClsString(ids)) {
+    if (id.startsWith('#')) {
+      if (attrs.id) {
+        throw new Error(
+          `Object already has an ID ${attrs.id}.  Tried to set to ${id}`,
+        )
+      }
+      attrs.id = id.substring(1)
+      continue
+    }
+
+    if (id.startsWith('.')) {
+      if (attrs.class === null || attrs.class === undefined) {
+        attrs.class = ''
+      }
+      attrs.class += ` ${id.substring(1)}`
+    }
+  }
+  return attrs
+}
+
+B.debounce = (func: any, timeout = 300) => {
+  let timer: any
+  return (...args: any[]) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      func.apply(this, args)
+    }, timeout)
+  }
+}
+
+B.throttle = (cb: any, delay = 1000) => {
+  let shouldWait = false
+  let waitingArgs: any
+  const timeoutFunc = () => {
+    if (waitingArgs == null) {
+      shouldWait = false
+    } else {
+      cb(...waitingArgs)
+      waitingArgs = null
+      setTimeout(timeoutFunc, delay)
+    }
+  }
+
+  return (...args: any[]) => {
+    if (shouldWait) {
+      waitingArgs = args
+      return
+    }
+
+    cb(...args)
+    shouldWait = true
+    setTimeout(timeoutFunc, delay)
+  }
+}
 
 B.allowProp = (func: any) => {
   func.allowProp = true
   return func
 }
+
+B.slugify = (str: string, replace = '-') => {
+  return str
+    .toString() // Cast to string (optional)
+    .normalize('NFKD') // The normalize() using NFKD method returns the Unicode Normalization Form of a given string.
+    .toLowerCase() // Convert the string to lowercase letters
+    .trim() // Remove whitespace from both sides of a string (optional)
+    .replace(/[^\w\s-]/g, '') // remove non-word [a-z0-9_], non-whitespace, non-hyphen characters
+    .replace(/[\s_-]+/g, replace) // swap any length of whitespace, underscore, hyphen characters with replace
+    .replace(/^-+|-+$/g, '') // remove leading, trailing -
+}
+
+B.unslugify = (
+  str: string,
+  replace: RegExp | string | undefined = undefined,
+) => {
+  if (!replace) {
+    replace = /\-/g
+  }
+  return str
+    .replace(replace, ' ')
+    .replace(
+      /\w\S*/g,
+      (text) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(),
+    )
+}
+
+/**
+ * let num = 100
+ * let result = stripMargin`The Number is:
+ *         |    ${num}
+ *         |Thanks for playing!`
+ * // returns "The Number is:\n    100\nThanks for playing!"
+ */
+B.stripMargin = (template: string[], ...expressions: any[]) => {
+  let result = template.reduce((accumulator: any, part: any, i: any) => {
+    return accumulator + expressions[i - 1] + part
+  })
+  return result.replace(/(\n|\r|\r\n)\s*\|/g, '$1')
+}
+
+/**
+ * let num = 100
+ * let result = stripMargin`The Number is:
+ *         |    ${num}
+ *         |Thanks for playing!`
+ * // returns "The Number is:    100 Thanks for playing!"
+ */
+B.joinMargin = (template: string[], ...expressions: any[]) => {
+  let result = template.reduce((accumulator: any, part: any, i: any) => {
+    return accumulator + expressions[i - 1] + part
+  })
+  return result.replace(/(\n|\r|\r\n)\s*\|/g, '  ')
+}
+
+B.titleize = (str: string, splits = /[\s_-]+/) => {
+  return str
+    .split(splits)
+    .map((str) => (str as any).$capitalize())
+    .join(' ')
+}
+
+B.capitalize = (str: string) => {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+}
+
+B.uuid = () => {
+  return `${1e7}-${1e3}-${4e3}-${8e3}-${1e11}`.replace(/[018]/g, (c) =>
+    (
+      parseInt(c) ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (parseInt(c) / 4)))
+    ).toString(16),
+  )
+}
+
+B.validateEmail = (email: string) => {
+  return String(email)
+    .toLowerCase()
+    .match(
+      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
+    )
+}
+
+B.isJSON = (str: string) => {
+  try {
+    JSON.parse(str)
+  } catch (e) {
+    return false
+  }
+  return true
+}
+
+B.strToBool = (s: string | number | undefined | null): boolean => {
+  if (s == undefined || s == null) return false
+  if (typeof s === 'number') {
+    return s != 0
+  }
+  s = s.toLowerCase()
+  if (!s.length) return false
+
+  if (s.startsWith('f') || s == '0') return false
+
+  return true
+}
+
+class AssertionError extends Error {}
+B.assert = <T>(val: T, name: string = 'val'): asserts val is NonNullable<T> => {
+  if (val === undefined || val === null) {
+    throw new AssertionError(
+      `Expected ${name} to be defined, but received ${val}`,
+    )
+  }
+}
+
+B.asyncUntil = ({ run, until, then, wait = 50 }: any = {}) => {
+  // Run function 'run', until function 'until' returns true, call function 'then' on result of run.
+  // Ran on a setInterval of default 50ms
+  if (!run || !until || !then) {
+    throw new Error('Must pass do, until, and then functions to asyncDo')
+  }
+
+  return new Promise((res, rej) => {
+    const intv = setInterval(() => {
+      try {
+        const r = run()
+        if (until(r)) {
+          clearInterval(intv)
+          res(then(r, true))
+        }
+      } catch (ex) {
+        clearInterval(intv)
+        rej(ex)
+      }
+    }, wait)
+  })
+}
+
+B.arrayToObj = (obj: any, key: string, hasMultiple = false) => {
+  const out: any = {}
+  for (const o of obj) {
+    if (o[key] === undefined) throw new Error(`Key ${key} not found in obj`)
+
+    const k = o[key]
+    if (!out[k]) {
+      if (hasMultiple) {
+        out[k] = [o]
+      } else {
+        out[k] = o
+      }
+      continue
+    }
+
+    hasMultiple = true
+    const cur = out[k]
+    if (Array.isArray(cur)) {
+      cur.push(o)
+      continue
+    }
+
+    out[k] = [out[k], o]
+  }
+
+  if (hasMultiple) {
+    // If there are entries with multiple items, make all child objects
+    // into an array so it's homogenous
+    for (const k of Object.keys(out)) {
+      if (!Array.isArray(out[k])) {
+        out[k] = [out[k]]
+      }
+    }
+  }
+
+  return out
+}
+
+B.recurseVar = (var_: any, cb: any, parent?: any, key?: any) => {
+  if (Array.isArray(var_)) {
+    if (cb(var_, parent, key)) {
+      return
+    }
+    for (const i in var_) {
+      B.recurseVar(var_[i], cb, var_, i)
+    }
+    return
+  }
+  if (typeof var_ === 'object') {
+    if (cb(var_, parent, key)) {
+      return
+    }
+    for (const k of Object.keys(var_)) {
+      B.recurseVar(var_[k], cb, var_, k)
+    }
+  }
+  if (cb(var_, key)) {
+    return
+  }
+}
+
+export function* arrayChunk(arr: any[], size: number): any {
+  if (size <= 0) throw new Error('Chunk size must be greater than 0')
+  for (let i = 0; i < arr.length; i += size) {
+    yield arr.slice(i, i + size)
+  }
+}
+B.arrayChunk = arrayChunk
 
 export default B()

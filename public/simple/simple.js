@@ -1,26 +1,32 @@
 import b from '/b.js'
 
-let name = 'UNKNOWN'
+let name = b.ob('')
 b.body.build(({ div, h1, button }) =>
   div(
     '#main',
-    h1('#header', `Hello ${name}!`),
     button(
       '#button',
       {
         onclick() {
-          name = prompt('Enter Name: ')
-          b('#header', `Hello ${name}!`)
+          name.value = prompt('Enter Name: ')
         },
-        style: { marginBottom: '12px' },
       },
-      'Set Name',
+      // name.as((v) => `Set Name${v ? ', ' + b.capitalize(v) : ''}`),
     ),
-    div(
-      '#content',
-      { style: { color: 'red' } },
-      'Your Content Goes Here',
-      div('#section', { style: { color: 'blue' } }, 'Your Section Goes Here'),
+    h1(
+      '#header',
+      {
+        style: {
+          display: name.as((v) => (v && v !== 'UNKNOWN' ? 'block' : 'none')),
+        },
+      },
+      name.as('Hello ${}!'),
     ),
+    // div(
+    //   '#content',
+    //   { style: { color: 'red' } },
+    //   'Your Content Goes Here',
+    //   div('#section', { style: { color: 'blue' } }, 'Your Section Goes Here'),
+    // ),
   ),
 )

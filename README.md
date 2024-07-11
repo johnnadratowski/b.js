@@ -21,6 +21,5 @@ B was built because of:
 
 ## TODO
 
-* Test events on/off
-* Test events allowProp decorator
-* 
+* Proxy Refactor
+* Recurse Var - Add NodeList, Map, Set support?

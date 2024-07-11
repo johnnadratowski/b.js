@@ -123,24 +123,6 @@ export function joinMargin(template, ...expressions) {
     });
     return result.replace(/(\n|\r|\r\n)\s*\|/g, '  ');
 }
-export function slugify(str, replace = '-') {
-    return str
-        .toString() // Cast to string (optional)
-        .normalize('NFKD') // The normalize() using NFKD method returns the Unicode Normalization Form of a given string.
-        .toLowerCase() // Convert the string to lowercase letters
-        .trim() // Remove whitespace from both sides of a string (optional)
-        .replace(/[^\w\s-]/g, '') // remove non-word [a-z0-9_], non-whitespace, non-hyphen characters
-        .replace(/[\s_-]+/g, replace) // swap any length of whitespace, underscore, hyphen characters with replace
-        .replace(/^-+|-+$/g, ''); // remove leading, trailing -
-}
-export function unslugify(str, replace = undefined) {
-    if (!replace) {
-        replace = /\-/g;
-    }
-    return str
-        .replace(replace, ' ')
-        .replace(/\w\S*/g, (text) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase());
-}
 export function titleize(str, splits = /[\s_-]+/) {
     return str
         .split(splits)
@@ -155,29 +137,6 @@ export const validateEmail = (email) => {
         .toLowerCase()
         .match(/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/);
 };
-export function throttle(cb, delay = 1000) {
-    let shouldWait = false;
-    let waitingArgs;
-    const timeoutFunc = () => {
-        if (waitingArgs == null) {
-            shouldWait = false;
-        }
-        else {
-            cb(...waitingArgs);
-            waitingArgs = null;
-            setTimeout(timeoutFunc, delay);
-        }
-    };
-    return (...args) => {
-        if (shouldWait) {
-            waitingArgs = args;
-            return;
-        }
-        cb(...args);
-        shouldWait = true;
-        setTimeout(timeoutFunc, delay);
-    };
-}
 export function isJSON(str) {
     try {
         JSON.parse(str);
@@ -186,15 +145,6 @@ export function isJSON(str) {
         return false;
     }
     return true;
-}
-export function debounce(func, timeout = 300) {
-    let timer;
-    return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-            func.apply(this, args);
-        }, timeout);
-    };
 }
 export async function asyncDo({ run, until, then, wait = 50 } = {}) {
     // Run function 'run', until function 'until' returns true, call function 'then' on result of run.
