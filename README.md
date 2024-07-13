@@ -23,3 +23,8 @@ B was built because of:
 
 * Proxy Refactor
 * Recurse Var - Add NodeList, Map, Set support?
+* IDs/Classes as chained funcs
+* Cleanup els in Reactive
+
+* DO CLASS SETTING REACTIVE
+* Other Reactive tests

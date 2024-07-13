@@ -355,7 +355,8 @@ export function B(opts = { root: null, parser: null }) {
                 p[0] !== undefined &&
                 !(isBrowser && p[0] instanceof HTMLElement) &&
                 !Array.isArray(p[0]) &&
-                !(OB.is_ob(p[0]) && typeof p[0].value !== 'object') &&
+                !OB.is_ob(p[0]) &&
+                !Reactive.is_r(p[0]) &&
                 typeof p[0] === 'object';
             let attrs = {};
             if (isAttrs) {
@@ -367,8 +368,7 @@ export function B(opts = { root: null, parser: null }) {
             const isInnerHTML = p.length &&
                 p[0] !== null &&
                 p[0] !== undefined &&
-                (typeof p[0] === 'string' ||
-                    (OB.is_ob(p[0]) && typeof p[0].value === 'string'));
+                (typeof p[0] === 'string' || Reactive.is_r(p[0]) || OB.is_ob(p[0]));
             if (isInnerHTML) {
                 attrs.innerHTML = p.shift();
             }
@@ -419,7 +419,21 @@ export function B(opts = { root: null, parser: null }) {
             b.set(el, attr);
         }
     };
-    b.setAttr = (el, k, v) => {
+    function useReactive(cb) {
+        return (el, v, k, attr, ...xtra) => {
+            let r;
+            if (OB.is_ob(v)) {
+                r = new Reactive(v);
+                if (attr)
+                    attr[k] = r; // replace on initial object
+            }
+            if (r || (r = Reactive.is_r(v))) {
+                return cb(el, k, r.use(el, k, cb, attr, ...xtra));
+            }
+            return cb(el, k, v);
+        };
+    }
+    const setAttr = useReactive((el, v, k) => {
         if (k === 'class' || k === 'classList') {
             b.cls(el, v, true);
             return;
@@ -436,8 +450,8 @@ export function B(opts = { root: null, parser: null }) {
             return;
         }
         el[k] = v;
-    };
-    b.setObj = (el, k, v, bind_to) => {
+    });
+    function setObj(el, attr, k, v) {
         const curVal = el?.[k] ?? undefined;
         switch (true) {
             case parser && k === 'style':
@@ -447,22 +461,22 @@ export function B(opts = { root: null, parser: null }) {
                     return `${k}:${v}`;
                 })
                     .join(';');
-                b.setAttr(el, k, style);
+                setAttr(el, k, style, attr);
             case k === 'on':
                 for (let [innerK, innerV] of Object.entries(v)) {
-                    if (innerK in EVENTS) {
+                    if (EVENTS.includes(innerK.toLowerCase())) {
                         innerK = innerK.substring(2);
                     }
                     if (Array.isArray(innerV)) {
-                        b.on(el, innerK, innerV[0], innerV[1], bind_to);
+                        b.on(el, innerK, innerV[0], innerV[1], attr);
                         continue;
                     }
-                    b.on(el, innerK, innerV, null, bind_to);
+                    b.on(el, innerK, innerV, null, attr);
                 }
                 return;
             case k === 'off':
                 for (let [innerK, innerV] of Object.entries(v)) {
-                    if (innerK in EVENTS) {
+                    if (EVENTS.includes(innerK.toLowerCase())) {
                         innerK = innerK.substring(2);
                     }
                     if (Array.isArray(innerV)) {
@@ -480,95 +494,98 @@ export function B(opts = { root: null, parser: null }) {
                 }
                 return;
         }
-    };
-    b.on = (elsSpec, type, listener, options, bind_to) => {
+    }
+    b.onAll = (elsSpec, type, listener, options, bind_to) => {
         const els = getEls(elsSpec);
         for (const el of els) {
-            const event = (e, ...a) => {
-                if (!listener.allowProp) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-                const ret = listener.call(bind_to || el, e, ...a);
-                if (ret === 'off') {
-                    b.off(el, type, listener);
-                }
-                return ret;
-            };
-            el.addEventListener(type, event, options);
-            const anyEl = el;
-            if (typeof anyEl.__events === 'undefined') {
-                anyEl.__events = {};
-            }
-            if (typeof anyEl.__events[type] === 'undefined') {
-                anyEl.__events[type] = [];
-            }
-            anyEl.__events[type].push([event, options, listener]);
+            b.on(el, type, listener, options, bind_to);
         }
     };
-    b.off = (elsSpec, type, listener) => {
+    b.on = useReactive((el, listener, type, options, bind_to) => {
+        const event = (e, ...a) => {
+            if (!listener.allowProp) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            const ret = listener.call(bind_to || el, e, ...a);
+            if (ret === 'off') {
+                b.off(el, type, listener);
+            }
+            return ret;
+        };
+        el.addEventListener(type, event, options);
+        const anyEl = el;
+        if (typeof anyEl.__events === 'undefined') {
+            anyEl.__events = {};
+        }
+        if (typeof anyEl.__events[type] === 'undefined') {
+            anyEl.__events[type] = [];
+        }
+        anyEl.__events[type].push([event, options, listener]);
+    });
+    b.offAll = (elsSpec, type, listener) => {
         const els = getEls(elsSpec);
         for (const el of els) {
-            const anyEl = el;
-            const toRemove = anyEl?.__events?.[type] ?? [];
-            toRemove
-                .filter((remove) => !listener || remove[2] == listener)
-                .forEach((remove) => {
-                el.removeEventListener(type, remove[0], remove[1]);
-            });
+            b.off(el, type, listener);
         }
     };
+    b.off = useReactive((el, listener, type) => {
+        const anyEl = el;
+        const toRemove = anyEl?.__events?.[type] ?? [];
+        toRemove
+            .filter((remove) => !listener || remove[2] == listener)
+            .forEach((remove) => {
+            el.removeEventListener(type, remove[0], remove[1]);
+        });
+    });
     b.set = (el, attr) => {
         if (!attr) {
             return el;
         }
-        if (OB.is_ob(attr)) {
-            attr = attr.use((newAttr) => {
-                b.set(el, newAttr);
-            });
-        }
         for (const [key, value] of Object.entries(attr)) {
             const k = key === 'class' ? 'classList' : key;
-            const curVal = el?.[k] ?? undefined;
-            let v = value;
-            if (OB.is_ob(value)) {
-                v = value.use((newV) => {
-                    b.set(el, { [k]: newV });
-                });
-            }
-            switch (true) {
-                case v === null:
-                    el.removeAttribute(k);
-                    continue;
-                case k === 'classList':
-                    b.setAttr(el, k, v);
-                    continue;
-                case typeof v === 'function':
-                    if (k.toLowerCase() in EVENTS &&
-                        (!curVal || typeof curVal === 'function')) {
-                        b.on(el, k.substring(2), v, attr);
-                        continue;
-                    }
-                    b.setAttr(el, k, v);
-                    continue;
-                case Array.isArray(v):
-                    if (Array.isArray(curVal)) {
-                        b.setAttr(el, k, v);
-                        continue;
-                    }
-                    b.setAttr(el, k, v.join(' '));
-                    continue;
-                case Array.isArray(curVal) && typeof v === 'string':
-                    b.setAttr(el, k, v.split(','));
-                    continue;
-                case typeof v === 'object':
-                    b.setObj(el, k, v, attr);
-                    continue;
-            }
-            b.setAttr(el, k, v);
+            doSet(el, k, value, attr);
         }
         return el;
     };
+    const doSet = useReactive((el, v, k, attr) => {
+        const curVal = el?.[k] ?? undefined;
+        switch (true) {
+            case v === null:
+                if (EVENTS.includes(k.toLowerCase())) {
+                    b.off(el, k.substring(2), v);
+                    return;
+                }
+                el.removeAttribute(k);
+                return;
+            case k === 'classList':
+                setAttr(el, k, v, attr);
+                return;
+            case typeof v === 'function':
+                if (EVENTS.includes(k.toLowerCase())) {
+                    b.on(el, k.substring(2), v, attr);
+                    return;
+                }
+                setAttr(el, k, v, attr);
+                return;
+            case Array.isArray(v):
+                if (Array.isArray(curVal)) {
+                    setAttr(el, k, v, attr);
+                    return;
+                }
+                setAttr(el, k, v.join(' '), attr);
+                return;
+            case Array.isArray(curVal) && typeof v === 'string':
+                setAttr(el, k, v.split(','), attr);
+                return;
+            case EVENTS.includes(k.toLowerCase()) && v === 'off':
+                b.off(el, k.substring(2), v);
+            case typeof v === 'object':
+                setObj(el, attr, k, v);
+                return;
+        }
+        setAttr(el, k, v, attr);
+    });
     b.elem = (tag, attr = {}, ...child) => {
         const el = root.createElement
             ? root.createElement(tag)
@@ -646,7 +663,7 @@ export function B(opts = { root: null, parser: null }) {
         const clsArray = !Array.isArray(cls) ? [cls] : cls;
         const out = [];
         for (const c of clsArray) {
-            if (typeof c !== 'object') {
+            if (typeof c !== 'object' || OB.is_ob(c) || Reactive.is_r(c)) {
                 out.push(c);
                 continue;
             }
@@ -686,7 +703,7 @@ export function B(opts = { root: null, parser: null }) {
      * @param {string} cls2Spec - The second list of classes. Can be same as cls1, or pred
      * @param {string} pred - The predicate, can be boolean or function
      */
-    b.cls = (elsSpec, cls1Spec, cls2Spec, pred) => {
+    b.clsAll = (elsSpec, cls1Spec, cls2Spec, pred) => {
         const els = getEls(elsSpec);
         if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
             pred = cls2Spec;
@@ -709,25 +726,40 @@ export function B(opts = { root: null, parser: null }) {
         pred = typeof pred === 'boolean' ? pred : defaultPredicate;
         for (const el of els) {
             for (const cls of cls1) {
-                const c = Array.isArray(cls) ? cls[0] : cls;
-                const predVal = typeof pred === 'function' ? pred(el, c) : pred;
-                const finPredVal = Array.isArray(cls) ? cls[1] : predVal;
-                b.setClass(el, c, finPredVal);
+                setClassPred(el, cls, pred, null, false);
             }
             if (!cls2 || !cls2.length)
                 continue;
             for (const cls of cls2) {
-                const c = Array.isArray(cls) ? cls[0] : cls;
-                const predVal = typeof pred === 'function' ? pred(el, c) : !pred;
-                const finPredVal = Array.isArray(cls) ? cls[1] : predVal;
-                b.setClass(el, c, finPredVal);
+                setClassPred(el, cls, pred, null, true);
                 continue;
             }
         }
         return els;
     };
+    const setClassPred = useReactive((el, cls, pred, attrs, inverse, ...xtra) => {
+        const defaultPred = inverse ? !pred : pred;
+        const predVal = typeof pred === 'function' ? pred(el, cls) : defaultPred;
+        b.setClass(el, cls, predVal);
+    });
+    b.cls = (el, cls1Spec, cls2Spec, pred) => {
+        const cls1 = B.any(cls1Spec);
+        const cls2 = B.any(cls2Spec);
+        for (const cls of cls1) {
+            const predVal = typeof pred === 'function' ? pred(el, cls) : pred;
+            b.setClass(el, cls, predVal);
+        }
+        if (!cls2 || !cls2.length)
+            return;
+        for (const cls of cls2) {
+            const predVal = typeof pred === 'function' ? pred(el, cls) : !pred;
+            b.setClass(el, cls, predVal);
+            continue;
+        }
+    };
     b.B = B;
     b.ob = B.ob;
+    b.r = B.r;
     b.isBrowser = B.isBrowser;
     b.escapeHTML = B.escapeHTML;
     b.splitClsString = B.splitClsString;
@@ -746,6 +778,8 @@ export function B(opts = { root: null, parser: null }) {
     b.isJSON = B.isJSON;
     b.strToBool = B.strToBool;
     b.assert = B.assert;
+    b.assertVal = B.assertVal;
+    b.isAsync = B.isAsync;
     b.asyncUntil = B.asyncUntil;
     b.arrayToObj = B.arrayToObj;
     b.recurseVar = B.recurseVar;
@@ -758,66 +792,72 @@ export function B(opts = { root: null, parser: null }) {
     }
     return b;
 }
+class Reactive {
+    static running = null;
+    __is_r = true;
+    cb;
+    to = {};
+    id;
+    constructor(cb) {
+        B.assertVal(cb, 'Reactive Callback');
+        B.assert(OB.is_ob(cb) || !B.isAsync(cb), 'Cannot use async function in reactive function');
+        this.cb = cb;
+        this.id = B.uuid();
+    }
+    static is_r(v) {
+        return v && v.hasOwnProperty('__is_r') ? v : null;
+    }
+    call(el, k, attrs, ...xtra) {
+        Reactive.running = this;
+        const v = OB.is_ob(this.cb) ? this.cb.value : this.cb(el, k, attrs, ...xtra);
+        Reactive.running = null;
+        return v;
+    }
+    use(el, k, cb, attrs, ...xtra) {
+        if (!(el.id in this.to)) {
+            this.to = { [el.id]: { el, k, attrs, xtra, cbs: [] } };
+        }
+        this.to[el.id].cbs.push(cb);
+        return this.call(el, k, attrs, ...xtra);
+    }
+    react(ob, newV, oldV) {
+        for (const key of Object.keys(this.to)) {
+            const { el, k, attrs, xtra, cbs } = this.to[key];
+            if (!el.isConnected) {
+                delete this.to[key];
+                continue;
+            }
+            for (const cb of cbs) {
+                cb(el, k, this.call(el, k, attrs, ...xtra, ob, newV, oldV), attrs, ...xtra, ob, newV, oldV);
+            }
+        }
+    }
+}
+B.r = (cb) => {
+    return new Reactive(cb);
+};
 class OB {
     __is_ob = true;
     _value = null;
-    using = [];
-    cb;
-    children = [];
-    constructor(value, cb) {
+    reactives = {};
+    constructor(value) {
         this._value = value;
-        this.cb = cb;
     }
     static is_ob(v) {
         return v && v.hasOwnProperty('__is_ob') ? v : null;
     }
-    static replace_ob(v, cb) {
-        const obs = [];
-        B.recurseVar(v, (item, k, ...parentMeta) => {
-            let ob;
-            if (!parent || !k || !(ob = OB.is_ob(item))) {
-                return false;
-            }
-            parent[k] = cb(ob);
-            obs.push(ob);
-            return false;
-        });
-        return obs;
-    }
-    static getValue(ob, v) {
-        if (!ob.cb)
-            return v;
-        if (typeof ob.cb === 'function') {
-            return ob.cb(v);
-        }
-        else if (typeof ob.cb === 'string') {
-            return ob.cb.replace('${}', v ? v.toString() : '');
-        }
-        else {
-            throw new Error(`Unexpected type for observable transform: ${typeof ob.cb}`);
-        }
-    }
     get value() {
-        return OB.getValue(this, this._value);
+        if (Reactive.running && !this.reactives[Reactive.running.id]) {
+            this.reactives[Reactive.running.id] = Reactive.running;
+        }
+        return this._value;
     }
     set value(newV) {
         const oldV = this.value;
-        this._value = OB.getValue(this, newV);
-        for (const use of this.using) {
-            use(this._value, oldV);
+        this._value = newV;
+        for (const react of Object.values(this.reactives)) {
+            B.any(react).react(this, newV, oldV);
         }
-        for (const child of this.children) {
-            child.value = newV;
-        }
-    }
-    as(cb) {
-        const child = new OB(this.value, cb);
-        this.children.push(child);
-        return child;
-    }
-    use(cb) {
-        this.using.push(cb);
-        return this.value;
     }
 }
 B.ob = (v) => {
@@ -859,6 +899,8 @@ B.setClsString = (attrs, ids) => {
             attrs.class += ` ${id.substring(1)}`;
         }
     }
+    if (!attrs.id)
+        attrs.id = B.uuid();
     return attrs;
 };
 B.debounce = (func, timeout = 300) => {
@@ -892,6 +934,9 @@ B.throttle = (cb, delay = 1000) => {
         shouldWait = true;
         setTimeout(timeoutFunc, delay);
     };
+};
+B.isAsync = (fn) => {
+    return fn.constructor.name === 'AsyncFunction';
 };
 B.allowProp = (func) => {
     func.allowProp = true;
@@ -983,10 +1028,18 @@ B.strToBool = (s) => {
 };
 class AssertionError extends Error {
 }
-B.assert = (val, name = 'val') => {
+B.assertVal = (val, name = 'val') => {
     if (val === undefined || val === null) {
         throw new AssertionError(`Expected ${name} to be defined, but received ${val}`);
     }
+};
+B.assert = (condition, msg) => {
+    if (!condition) {
+        throw new AssertionError(msg);
+    }
+};
+B.any = (val) => {
+    return val;
 };
 B.asyncUntil = ({ run, until, then, wait = 50 } = {}) => {
     // Run function 'run', until function 'until' returns true, call function 'then' on result of run.

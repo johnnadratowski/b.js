@@ -1,26 +1,35 @@
 import b from '/b.js'
 
 let name = b.ob('')
+
+let disableClick = b.ob(false)
 b.body.build(({ div, h1, button }) =>
   div(
     '#main',
     button(
       '#button',
       {
-        onclick() {
-          name.value = prompt('Enter Name: ')
-        },
+        onclick: b.r(() =>
+          disableClick.value
+            ? null
+            : () => {
+                name.value = prompt('Enter Name: ')
+                disableClick.value = true
+              },
+        ),
       },
-      // name.as((v) => `Set Name${v ? ', ' + b.capitalize(v) : ''}`),
+      b.r(() => `Set Name${name.value ? ', ' + b.capitalize(name.value) : ''}`),
     ),
     h1(
       '#header',
       {
         style: {
-          display: name.as((v) => (v && v !== 'UNKNOWN' ? 'block' : 'none')),
+          display: b.r(() =>
+            name.value && name.value !== 'UNKNOWN' ? 'block' : 'none',
+          ),
         },
       },
-      name.as('Hello ${}!'),
+      name,
     ),
     // div(
     //   '#content',
