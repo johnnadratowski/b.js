@@ -424,7 +424,7 @@ export function B(opts = { root: null, parser: null }) {
             let r;
             if (OB.is_ob(v)) {
                 r = new Reactive(v);
-                if (attr)
+                if (attr && k)
                     attr[k] = r; // replace on initial object
             }
             if (r || (r = Reactive.is_r(v))) {
@@ -746,14 +746,12 @@ export function B(opts = { root: null, parser: null }) {
         const cls1 = B.any(cls1Spec);
         const cls2 = B.any(cls2Spec);
         for (const cls of cls1) {
-            const predVal = typeof pred === 'function' ? pred(el, cls) : pred;
-            b.setClass(el, cls, predVal);
+            setClassPred(el, cls, pred, null, false);
         }
         if (!cls2 || !cls2.length)
             return;
         for (const cls of cls2) {
-            const predVal = typeof pred === 'function' ? pred(el, cls) : !pred;
-            b.setClass(el, cls, predVal);
+            setClassPred(el, cls, pred, null, true);
             continue;
         }
     };
