@@ -606,44 +606,51 @@ export function B(opts = { root: null, parser: null }) {
         }
         return true;
     };
-    b.addClasses = (elsSpec, clsSpec) => {
+    b.addClassesAll = (elsSpec, clsSpec) => {
         const els = getEls(elsSpec);
-        const cls = formatClasses(clsSpec);
-        if (!cls)
-            return;
         for (const el of els) {
-            for (let c of cls) {
-                const pred = Array.isArray(c) ? c[1] : true;
-                const cCls = Array.isArray(c) ? c[0] : c;
-                if (pred) {
-                    el.classList.add(cCls);
-                }
-            }
+            b.addClasses(el, clsSpec);
         }
         return els.length === 1 ? els[0] : els;
     };
-    b.removeClasses = (elsList, clsSpec) => {
-        const els = getEls(elsList);
+    b.addClasses = (el, clsSpec) => {
         const cls = formatClasses(clsSpec);
-        els.forEach((el) => {
-            if (!cls) {
-                if (el.className) {
-                    el.className = '';
-                }
-                else {
-                    Array.from(el.classList).forEach((c) => el.classList.remove(c));
-                }
-                return;
+        if (!cls)
+            return;
+        for (let c of cls) {
+            const pred = Array.isArray(c) ? c[1] : true;
+            const cCls = Array.isArray(c) ? c[0] : c;
+            if (pred) {
+                el.classList.add(cCls);
             }
-            for (let c of cls) {
-                const pred = Array.isArray(c) ? c[1] : true;
-                const cCls = Array.isArray(c) ? c[0] : c;
-                if (pred) {
-                    el.classList.remove(cCls);
-                }
-            }
-        });
+        }
+        return el;
+    };
+    b.removeClassesAll = (elsList, clsSpec) => {
+        const els = getEls(elsList);
+        for (const el of els) {
+            b.removeClasses(el, clsSpec);
+        }
         return els.length === 1 ? els[0] : els;
+    };
+    b.removeClasses = (el, clsSpec) => {
+        const cls = formatClasses(clsSpec);
+        if (!cls) {
+            if (el.className) {
+                el.className = '';
+            }
+            else {
+                Array.from(el.classList).forEach((c) => el.classList.remove(c));
+            }
+            return;
+        }
+        for (let c of cls) {
+            const pred = Array.isArray(c) ? c[1] : true;
+            const cCls = Array.isArray(c) ? c[0] : c;
+            if (pred) {
+                el.classList.remove(cCls);
+            }
+        }
     };
     function getEls(els) {
         if (typeof els === 'string') {
@@ -657,6 +664,9 @@ export function B(opts = { root: null, parser: null }) {
     function formatClasses(cls) {
         if (cls === null || cls === undefined)
             return cls;
+        if (OB.is_ob(cls) || Reactive.is_r(cls)) {
+            throw new Error('Can only use reactives in setting classlist during a `set` operation, or in the main elem');
+        }
         if (typeof cls === 'string') {
             cls = B.splitClsString(cls);
         }
@@ -705,6 +715,18 @@ export function B(opts = { root: null, parser: null }) {
      */
     b.clsAll = (elsSpec, cls1Spec, cls2Spec, pred) => {
         const els = getEls(elsSpec);
+        for (const el of els) {
+            b.cls(el, cls1Spec, cls2Spec, pred);
+        }
+        return els;
+    };
+    b.cls = (el, cls1Spec, cls2Spec, pred) => {
+        return _cls(el, cls1Spec, cls2Spec, pred, null);
+    };
+    function _cls(el, cls1Spec, cls2Spec, pred, attr) {
+        return _clsInner(el, cls1Spec, 'classList', attr, cls2Spec, pred);
+    }
+    const _clsInner = useReactive((el, cls1Spec, k, attr, cls2Spec, pred, ...xtra) => {
         if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
             pred = cls2Spec;
             cls2Spec = undefined;
@@ -713,10 +735,10 @@ export function B(opts = { root: null, parser: null }) {
         const cls2 = formatClasses(cls2Spec);
         if (!cls1 || !cls1.length) {
             // if no first class passed, remove all classes
-            b.removeClasses(els);
+            b.removeClasses(el);
             if (cls2 && cls2.length) {
                 // if second classes found with no first classes, add all second
-                b.addClasses(els, cls2Spec);
+                b.addClasses(el, cls2Spec);
             }
             return;
         }
@@ -724,37 +746,21 @@ export function B(opts = { root: null, parser: null }) {
             ? (el, cls) => !el.classList.contains(cls)
             : true;
         pred = typeof pred === 'boolean' ? pred : defaultPredicate;
-        for (const el of els) {
-            for (const cls of cls1) {
-                setClassPred(el, cls, pred, null, false);
-            }
-            if (!cls2 || !cls2.length)
-                continue;
-            for (const cls of cls2) {
-                setClassPred(el, cls, pred, null, true);
-                continue;
-            }
-        }
-        return els;
-    };
-    const setClassPred = useReactive((el, cls, pred, attrs, inverse, ...xtra) => {
-        const defaultPred = inverse ? !pred : pred;
-        const predVal = typeof pred === 'function' ? pred(el, cls) : defaultPred;
-        b.setClass(el, cls, predVal);
-    });
-    b.cls = (el, cls1Spec, cls2Spec, pred) => {
-        const cls1 = B.any(cls1Spec);
-        const cls2 = B.any(cls2Spec);
         for (const cls of cls1) {
-            setClassPred(el, cls, pred, null, false);
+            const predVal = typeof pred === 'function' ? pred(el, cls) : pred;
+            b.setClass(el, cls, predVal);
         }
         if (!cls2 || !cls2.length)
             return;
         for (const cls of cls2) {
-            setClassPred(el, cls, pred, null, true);
+            const predVal = typeof pred === 'function' ? pred(el, cls) : !pred;
+            b.setClass(el, cls, predVal);
             continue;
         }
-    };
+    });
+    const setClassPred = useReactive((el, cls, pred, attrs, inverse, ...xtra) => {
+        const defaultPred = inverse ? !pred : pred;
+    });
     b.B = B;
     b.ob = B.ob;
     b.r = B.r;

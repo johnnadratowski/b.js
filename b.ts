@@ -701,44 +701,53 @@ export function B(opts = { root: null, parser: null }): any {
     return true
   }
 
-  b.addClasses = (elsSpec: ElemSpec, clsSpec?: ClassSpec) => {
+  b.addClassesAll = (elsSpec: ElemSpec, clsSpec?: ClassSpec) => {
     const els = getEls(elsSpec)
-    const cls = formatClasses(clsSpec)
-    if (!cls) return
-
     for (const el of els) {
-      for (let c of cls) {
-        const pred = Array.isArray(c) ? c[1] : true
-        const cCls = Array.isArray(c) ? c[0] : c
-        if (pred) {
-          el.classList.add(cCls as string)
-        }
-      }
+      b.addClasses(el, clsSpec)
     }
     return els.length === 1 ? els[0] : els
   }
 
-  b.removeClasses = (elsList: ElemSpec, clsSpec?: ClassSpec) => {
-    const els = getEls(elsList)
+  b.addClasses = (el: HTMLElement, clsSpec?: ClassSpec) => {
     const cls = formatClasses(clsSpec)
-    els.forEach((el: any) => {
-      if (!cls) {
-        if (el.className) {
-          el.className = ''
-        } else {
-          Array.from(el.classList).forEach((c) => el.classList.remove(c))
-        }
-        return
+    if (!cls) return
+
+    for (let c of cls) {
+      const pred = Array.isArray(c) ? c[1] : true
+      const cCls = Array.isArray(c) ? c[0] : c
+      if (pred) {
+        el.classList.add(cCls as string)
       }
-      for (let c of cls) {
-        const pred = Array.isArray(c) ? c[1] : true
-        const cCls = Array.isArray(c) ? c[0] : c
-        if (pred) {
-          el.classList.remove(cCls)
-        }
-      }
-    })
+    }
+    return el
+  }
+
+  b.removeClassesAll = (elsList: ElemSpec, clsSpec?: ClassSpec) => {
+    const els = getEls(elsList)
+    for (const el of els) {
+      b.removeClasses(el, clsSpec)
+    }
     return els.length === 1 ? els[0] : els
+  }
+
+  b.removeClasses = (el: HTMLElement, clsSpec?: ClassSpec) => {
+    const cls = formatClasses(clsSpec)
+    if (!cls) {
+      if (el.className) {
+        el.className = ''
+      } else {
+        Array.from(el.classList).forEach((c) => el.classList.remove(c))
+      }
+      return
+    }
+    for (let c of cls) {
+      const pred = Array.isArray(c) ? c[1] : true
+      const cCls = Array.isArray(c) ? c[0] : c
+      if (pred) {
+        el.classList.remove(cCls)
+      }
+    }
   }
 
   function getEls(els: ElemSpec): HTMLElement[] {
@@ -753,6 +762,11 @@ export function B(opts = { root: null, parser: null }): any {
 
   function formatClasses(cls: any): any {
     if (cls === null || cls === undefined) return cls
+    if (OB.is_ob(cls) || Reactive.is_r(cls)) {
+      throw new Error(
+        'Can only use reactives in setting classlist during a `set` operation, or in the main elem',
+      )
+    }
 
     if (typeof cls === 'string') {
       cls = B.splitClsString(cls)
@@ -809,44 +823,80 @@ export function B(opts = { root: null, parser: null }): any {
     pred?: Predicate | None,
   ) => {
     const els = getEls(elsSpec)
-
-    if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
-      pred = cls2Spec
-      cls2Spec = undefined
-    }
-
-    const cls1 = formatClasses(cls1Spec)
-    const cls2 = formatClasses(cls2Spec)
-
-    if (!cls1 || !cls1.length) {
-      // if no first class passed, remove all classes
-      b.removeClasses(els)
-      if (cls2 && cls2.length) {
-        // if second classes found with no first classes, add all second
-        b.addClasses(els, cls2Spec)
-      }
-      return
-    }
-
-    const defaultPredicate = !cls2
-      ? (el: any, cls: any) => !el.classList.contains(cls)
-      : true
-
-    pred = typeof pred === 'boolean' ? pred : defaultPredicate
-
     for (const el of els) {
-      for (const cls of cls1) {
-        setClassPred(el, cls, pred, null, false)
-      }
-      if (!cls2 || !cls2.length) continue
-
-      for (const cls of cls2) {
-        setClassPred(el, cls, pred, null, true)
-        continue
-      }
+      b.cls(el, cls1Spec, cls2Spec, pred)
     }
     return els
   }
+
+  b.cls = (
+    el: HTMLElement,
+    cls1Spec: ClassSpec,
+    cls2Spec?: ClassSpec | Predicate,
+    pred?: Predicate | None,
+  ) => {
+    return _cls(el, cls1Spec, cls2Spec, pred, null)
+  }
+
+  function _cls(
+    el: HTMLElement,
+    cls1Spec: ClassSpec,
+    cls2Spec: ClassSpec | Predicate,
+    pred: Predicate | None,
+    attr?: any,
+  ) {
+    return _clsInner(el, cls1Spec, 'classList', attr, cls2Spec, pred)
+  }
+
+  const _clsInner = useReactive(
+    (
+      el: HTMLElement,
+      cls1Spec: any,
+      k: any,
+      attr: any,
+      cls2Spec: any,
+      pred: any,
+      ...xtra: any[]
+    ) => {
+      if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
+        pred = cls2Spec
+        cls2Spec = undefined
+      }
+
+      const cls1 = formatClasses(cls1Spec)
+      const cls2 = formatClasses(cls2Spec)
+      if (!cls1 || !cls1.length) {
+        // if no first class passed, remove all classes
+        b.removeClasses(el)
+        if (cls2 && cls2.length) {
+          // if second classes found with no first classes, add all second
+          b.addClasses(el, cls2Spec)
+        }
+        return
+      }
+
+      const defaultPredicate = !cls2
+        ? (el: any, cls: any) => !el.classList.contains(cls)
+        : true
+
+      pred = typeof pred === 'boolean' ? pred : defaultPredicate
+      for (const cls of cls1) {
+        const predVal =
+          typeof pred === 'function' ? pred(el, cls as string) : pred
+
+        b.setClass(el, cls as string, predVal as boolean)
+      }
+      if (!cls2 || !cls2.length) return
+
+      for (const cls of cls2) {
+        const predVal =
+          typeof pred === 'function' ? pred(el, cls as string) : !pred
+
+        b.setClass(el, cls as string, predVal as boolean)
+        continue
+      }
+    },
+  )
 
   const setClassPred = useReactive(
     (
@@ -858,31 +908,8 @@ export function B(opts = { root: null, parser: null }): any {
       ...xtra: any[]
     ) => {
       const defaultPred = inverse ? !pred : pred
-      const predVal =
-        typeof pred === 'function' ? pred(el, cls as string) : defaultPred
-
-      b.setClass(el, cls as string, predVal as boolean)
     },
   )
-
-  b.cls = (
-    el: HTMLElement,
-    cls1Spec: ClassSpec,
-    cls2Spec?: ClassSpec | Predicate,
-    pred?: Predicate | None,
-  ) => {
-    const cls1 = B.any(cls1Spec)
-    const cls2 = B.any(cls2Spec)
-    for (const cls of cls1) {
-      setClassPred(el, cls, pred, null, false)
-    }
-    if (!cls2 || !cls2.length) return
-
-    for (const cls of cls2) {
-      setClassPred(el, cls, pred, null, true)
-      continue
-    }
-  }
 
   b.B = B
   b.ob = B.ob
