@@ -25,6 +25,6 @@ B was built because of:
 * Recurse Var - Add NodeList, Map, Set support?
 * IDs/Classes as chained funcs
 * Cleanup els in Reactive
-
+* Custom Events
 * DO CLASS SETTING REACTIVE
 * Other Reactive tests

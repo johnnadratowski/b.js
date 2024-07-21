@@ -346,9 +346,6 @@ export function B(opts = { root: null, parser: null }): any {
       set(attr: any) {
         return b.set(parent, attr)
       },
-      childB(sel: any, attr: any) {
-        return b(parent.querySelector(sel), attr)
-      },
       hasCls(...cls: string[]): boolean {
         return b.hasCls(parent, ...cls)
       },
@@ -496,21 +493,23 @@ export function B(opts = { root: null, parser: null }): any {
   }
 
   function useReactive(cb: any) {
-    return (el: any, v?: any, k?: any, attr?: any, ...xtra: any[]) => {
+    return (el: any, k?: any, v?: any, attr?: any, ...xtra: any[]) => {
       let r
       if (OB.is_ob(v)) {
         r = new Reactive(v)
-        if (attr && k) attr[k] = r // replace on initial object
       }
 
       if (r || (r = Reactive.is_r(v))) {
+        if (Reactive.is_reactive(r)) {
+          return cb(el, k, r.call(el, k, attr, ...xtra))
+        }
         return cb(el, k, r.use(el, k, cb, attr, ...xtra))
       }
       return cb(el, k, v)
     }
   }
 
-  const setAttr = useReactive((el: any, v: any, k: string) => {
+  const setAttr = useReactive((el: any, k: string, v: any) => {
     if (k === 'class' || k === 'classList') {
       b.cls(el, v, true)
       return
@@ -528,6 +527,10 @@ export function B(opts = { root: null, parser: null }): any {
     }
 
     el[k] = v
+  })
+
+  const setObjAttr = useReactive((obj: any, k: string, v: any) => {
+    obj[k] = v
   })
 
   function setObj(el: HTMLElement, attr: any, k: string, v: object) {
@@ -568,7 +571,7 @@ export function B(opts = { root: null, parser: null }): any {
       case curVal != undefined && curVal != null && typeof curVal === 'object':
         for (const [innerK, innerV] of Object.entries(v)) {
           if (innerK in curVal) {
-            curVal[innerK] = innerV
+            setObjAttr(curVal, innerK, innerV)
           }
         }
         return
@@ -589,7 +592,7 @@ export function B(opts = { root: null, parser: null }): any {
   }
 
   b.on = useReactive(
-    (el: any, listener: any, type: string, options?: any, bind_to?: any) => {
+    (el: any, type: string, listener: any, options?: any, bind_to?: any) => {
       const event = (e: Event, ...a: any) => {
         if (!listener.allowProp) {
           e.preventDefault()
@@ -620,7 +623,7 @@ export function B(opts = { root: null, parser: null }): any {
     }
   }
 
-  b.off = useReactive((el: HTMLElement, listener?: any, type: string) => {
+  b.off = useReactive((el: HTMLElement, type: string, listener?: any) => {
     const anyEl = el as any
     const toRemove = anyEl?.__events?.[type] ?? []
     toRemove
@@ -642,7 +645,7 @@ export function B(opts = { root: null, parser: null }): any {
     return el
   }
 
-  const doSet = useReactive((el: HTMLElement, v: any, k: any, attr: any) => {
+  const doSet = useReactive((el: HTMLElement, k: any, v: any, attr: any) => {
     const curVal = el?.[k as keyof typeof el] ?? undefined
     switch (true) {
       case v === null:
@@ -675,7 +678,7 @@ export function B(opts = { root: null, parser: null }): any {
       case EVENTS.includes(k.toLowerCase()) && v === 'off':
         b.off(el, k.substring(2), v)
       case typeof v === 'object':
-        setObj(el, attr, k, v)
+        setObj(el, k, attr, v)
         return
     }
     setAttr(el, k, v, attr)
@@ -898,19 +901,6 @@ export function B(opts = { root: null, parser: null }): any {
     },
   )
 
-  const setClassPred = useReactive(
-    (
-      el: HTMLElement,
-      cls: any,
-      pred: any,
-      attrs?: any,
-      inverse?: boolean,
-      ...xtra: any[]
-    ) => {
-      const defaultPred = inverse ? !pred : pred
-    },
-  )
-
   b.B = B
   b.ob = B.ob
   b.r = B.r
@@ -968,6 +958,10 @@ class Reactive {
     return v && v.hasOwnProperty('__is_r') ? (v as Reactive) : null
   }
 
+  static is_reactive(v: any): boolean {
+    return v?.__reactive ?? false
+  }
+
   call(el: HTMLElement, k: string, attrs?: any, ...xtra: any[]): any {
     Reactive.running = this
     const v = OB.is_ob(this.cb) ? this.cb.value : this.cb(el, k, attrs, ...xtra)
@@ -977,8 +971,16 @@ class Reactive {
 
   use(el: HTMLElement, k: string, cb: any, attrs?: any, ...xtra: any[]): any {
     if (!(el.id in this.to)) {
-      this.to = { [el.id]: { el, k, attrs, xtra, cbs: [] } }
+      this.to[el.id] = { el, k, attrs, xtra, cbs: [] }
     }
+    if (attrs && k)
+      attrs[k] = new Proxy(this, {
+        get(target, prop, receiver) {
+          if (prop === '__reactive') return true
+          // @ts-ignore
+          return Reflect.get(...arguments)
+        },
+      })
     this.to[el.id].cbs.push(cb)
     return this.call(el, k, attrs, ...xtra)
   }

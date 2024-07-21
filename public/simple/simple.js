@@ -1,8 +1,8 @@
 import b from '/b.js'
 
 let name = b.ob('')
-
 let disableClick = b.ob(false)
+
 b.body.build(({ div, h1, button }) =>
   div(
     '#main',
@@ -19,6 +19,16 @@ b.body.build(({ div, h1, button }) =>
         ),
       },
       b.r(() => `Set Name${name.value ? ', ' + b.capitalize(name.value) : ''}`),
+    ),
+    button(
+      '#reset-button',
+      {
+        onclick() {
+          disableClick.value = false
+          name.value = ''
+        },
+      },
+      'Reset',
     ),
     h1(
       '#header',

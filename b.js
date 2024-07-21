@@ -291,9 +291,6 @@ export function B(opts = { root: null, parser: null }) {
             set(attr) {
                 return b.set(parent, attr);
             },
-            childB(sel, attr) {
-                return b(parent.querySelector(sel), attr);
-            },
             hasCls(...cls) {
                 return b.hasCls(parent, ...cls);
             },
@@ -420,20 +417,21 @@ export function B(opts = { root: null, parser: null }) {
         }
     };
     function useReactive(cb) {
-        return (el, v, k, attr, ...xtra) => {
+        return (el, k, v, attr, ...xtra) => {
             let r;
             if (OB.is_ob(v)) {
                 r = new Reactive(v);
-                if (attr && k)
-                    attr[k] = r; // replace on initial object
             }
             if (r || (r = Reactive.is_r(v))) {
+                if (Reactive.is_reactive(r)) {
+                    return cb(el, k, r.call(el, k, attr, ...xtra));
+                }
                 return cb(el, k, r.use(el, k, cb, attr, ...xtra));
             }
             return cb(el, k, v);
         };
     }
-    const setAttr = useReactive((el, v, k) => {
+    const setAttr = useReactive((el, k, v) => {
         if (k === 'class' || k === 'classList') {
             b.cls(el, v, true);
             return;
@@ -450,6 +448,9 @@ export function B(opts = { root: null, parser: null }) {
             return;
         }
         el[k] = v;
+    });
+    const setObjAttr = useReactive((obj, k, v) => {
+        obj[k] = v;
     });
     function setObj(el, attr, k, v) {
         const curVal = el?.[k] ?? undefined;
@@ -489,7 +490,7 @@ export function B(opts = { root: null, parser: null }) {
             case curVal != undefined && curVal != null && typeof curVal === 'object':
                 for (const [innerK, innerV] of Object.entries(v)) {
                     if (innerK in curVal) {
-                        curVal[innerK] = innerV;
+                        setObjAttr(curVal, innerK, innerV);
                     }
                 }
                 return;
@@ -501,7 +502,7 @@ export function B(opts = { root: null, parser: null }) {
             b.on(el, type, listener, options, bind_to);
         }
     };
-    b.on = useReactive((el, listener, type, options, bind_to) => {
+    b.on = useReactive((el, type, listener, options, bind_to) => {
         const event = (e, ...a) => {
             if (!listener.allowProp) {
                 e.preventDefault();
@@ -529,7 +530,7 @@ export function B(opts = { root: null, parser: null }) {
             b.off(el, type, listener);
         }
     };
-    b.off = useReactive((el, listener, type) => {
+    b.off = useReactive((el, type, listener) => {
         const anyEl = el;
         const toRemove = anyEl?.__events?.[type] ?? [];
         toRemove
@@ -548,7 +549,7 @@ export function B(opts = { root: null, parser: null }) {
         }
         return el;
     };
-    const doSet = useReactive((el, v, k, attr) => {
+    const doSet = useReactive((el, k, v, attr) => {
         const curVal = el?.[k] ?? undefined;
         switch (true) {
             case v === null:
@@ -581,7 +582,7 @@ export function B(opts = { root: null, parser: null }) {
             case EVENTS.includes(k.toLowerCase()) && v === 'off':
                 b.off(el, k.substring(2), v);
             case typeof v === 'object':
-                setObj(el, attr, k, v);
+                setObj(el, k, attr, v);
                 return;
         }
         setAttr(el, k, v, attr);
@@ -758,9 +759,6 @@ export function B(opts = { root: null, parser: null }) {
             continue;
         }
     });
-    const setClassPred = useReactive((el, cls, pred, attrs, inverse, ...xtra) => {
-        const defaultPred = inverse ? !pred : pred;
-    });
     b.B = B;
     b.ob = B.ob;
     b.r = B.r;
@@ -811,6 +809,9 @@ class Reactive {
     static is_r(v) {
         return v && v.hasOwnProperty('__is_r') ? v : null;
     }
+    static is_reactive(v) {
+        return v?.__reactive ?? false;
+    }
     call(el, k, attrs, ...xtra) {
         Reactive.running = this;
         const v = OB.is_ob(this.cb) ? this.cb.value : this.cb(el, k, attrs, ...xtra);
@@ -819,8 +820,17 @@ class Reactive {
     }
     use(el, k, cb, attrs, ...xtra) {
         if (!(el.id in this.to)) {
-            this.to = { [el.id]: { el, k, attrs, xtra, cbs: [] } };
+            this.to[el.id] = { el, k, attrs, xtra, cbs: [] };
         }
+        if (attrs && k)
+            attrs[k] = new Proxy(this, {
+                get(target, prop, receiver) {
+                    if (prop === '__reactive')
+                        return true;
+                    // @ts-ignore
+                    return Reflect.get(...arguments);
+                },
+            });
         this.to[el.id].cbs.push(cb);
         return this.call(el, k, attrs, ...xtra);
     }
