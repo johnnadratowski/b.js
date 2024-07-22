@@ -21,10 +21,11 @@ B was built because of:
 
 ## TODO
 
+* DO CLASS SETTING REACTIVE
+* IDs/Classes as chained funcs
+* Optionally not render elem using reactive
 * Proxy Refactor
 * Recurse Var - Add NodeList, Map, Set support?
-* IDs/Classes as chained funcs
 * Cleanup els in Reactive
-* Custom Events
-* DO CLASS SETTING REACTIVE
+* Custom Events/custom elements
 * Other Reactive tests

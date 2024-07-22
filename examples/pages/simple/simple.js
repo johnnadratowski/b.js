@@ -17,6 +17,13 @@ b.body.build(({ div, h1, button }) =>
                 disableClick.value = true
               },
         ),
+        class: {
+          cls: true,
+          disabled: disableClick,
+        },
+        style: {
+          color: b.r(() => (disableClick.value ? 'red' : 'black')),
+        },
       },
       b.r(() => `Set Name${name.value ? ', ' + b.capitalize(name.value) : ''}`),
     ),

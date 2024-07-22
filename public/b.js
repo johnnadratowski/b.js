@@ -426,13 +426,17 @@ export function B(opts = { root: null, parser: null }) {
                 if (Reactive.is_reactive(r)) {
                     return cb(el, k, r.call(el, k, attr, ...xtra));
                 }
-                return cb(el, k, r.use(el, k, cb, attr, ...xtra));
+                return cb(el, k, r.connect(el, k, cb, attr, ...xtra), attr, ...xtra);
             }
-            return cb(el, k, v);
+            return cb(el, k, v, attr, ...xtra);
         };
     }
     const setAttr = useReactive((el, k, v) => {
         if (k === 'class' || k === 'classList') {
+            b.cls(el, null, v, true);
+            return;
+        }
+        if (k === 'classAppend') {
             b.cls(el, v, true);
             return;
         }
@@ -449,10 +453,10 @@ export function B(opts = { root: null, parser: null }) {
         }
         el[k] = v;
     });
-    const setObjAttr = useReactive((obj, k, v) => {
+    const setObjAttr = useReactive((el, k, v, obj) => {
         obj[k] = v;
     });
-    function setObj(el, attr, k, v) {
+    function setObj(el, k, v, attr) {
         const curVal = el?.[k] ?? undefined;
         switch (true) {
             case parser && k === 'style':
@@ -490,7 +494,7 @@ export function B(opts = { root: null, parser: null }) {
             case curVal != undefined && curVal != null && typeof curVal === 'object':
                 for (const [innerK, innerV] of Object.entries(v)) {
                     if (innerK in curVal) {
-                        setObjAttr(curVal, innerK, innerV);
+                        setObjAttr(el, innerK, innerV, curVal);
                     }
                 }
                 return;
@@ -544,23 +548,22 @@ export function B(opts = { root: null, parser: null }) {
             return el;
         }
         for (const [key, value] of Object.entries(attr)) {
-            const k = key === 'class' ? 'classList' : key;
-            doSet(el, k, value, attr);
+            doSet(el, key, value, attr);
         }
         return el;
     };
     const doSet = useReactive((el, k, v, attr) => {
         const curVal = el?.[k] ?? undefined;
         switch (true) {
+            case k === 'classList' || k === 'classAppend' || k === 'class':
+                setAttr(el, k, v, attr);
+                return;
             case v === null:
                 if (EVENTS.includes(k.toLowerCase())) {
                     b.off(el, k.substring(2), v);
                     return;
                 }
                 el.removeAttribute(k);
-                return;
-            case k === 'classList':
-                setAttr(el, k, v, attr);
                 return;
             case typeof v === 'function':
                 if (EVENTS.includes(k.toLowerCase())) {
@@ -582,7 +585,7 @@ export function B(opts = { root: null, parser: null }) {
             case EVENTS.includes(k.toLowerCase()) && v === 'off':
                 b.off(el, k.substring(2), v);
             case typeof v === 'object':
-                setObj(el, k, attr, v);
+                setObj(el, k, v, attr);
                 return;
         }
         setAttr(el, k, v, attr);
@@ -621,6 +624,8 @@ export function B(opts = { root: null, parser: null }) {
         for (let c of cls) {
             const pred = Array.isArray(c) ? c[1] : true;
             const cCls = Array.isArray(c) ? c[0] : c;
+            if (cCls === undefined || cCls === null)
+                continue;
             if (pred) {
                 el.classList.add(cCls);
             }
@@ -674,7 +679,7 @@ export function B(opts = { root: null, parser: null }) {
         const clsArray = !Array.isArray(cls) ? [cls] : cls;
         const out = [];
         for (const c of clsArray) {
-            if (typeof c !== 'object' || OB.is_ob(c) || Reactive.is_r(c)) {
+            if (!c || typeof c !== 'object' || OB.is_ob(c) || Reactive.is_r(c)) {
                 out.push(c);
                 continue;
             }
@@ -700,7 +705,6 @@ export function B(opts = { root: null, parser: null }) {
      *
      * If only passing cls1, will toggle all classes on and off.
      * If passing no cls1, and a cls2, will remove all classes, then add all from cls2
-     * If passing cls1, and a cls2, will add all classes from cls1 and remove all from cls2
      * If passing cls1, and a cls2, will toggle all classes in both lists
      * If passing cls1, and a pred (can pass pred into cls2) then all classes either added/removed based on pred
      * If passing cls1, and cls2, and a pred will use opposite pred for cls2
@@ -722,12 +726,34 @@ export function B(opts = { root: null, parser: null }) {
         return els;
     };
     b.cls = (el, cls1Spec, cls2Spec, pred) => {
-        return _cls(el, cls1Spec, cls2Spec, pred, null);
+        const cb = () => {
+            const [cls1React, cls2React, predReact] = B.clone([cls1Spec, cls2Spec, pred], (v) => {
+                let r;
+                if (r || (r = Reactive.is_r(v))) {
+                    return r.call(el, '');
+                }
+                return v;
+            });
+            return _cls(el, cls1React, cls2React, predReact, null);
+        };
+        B.recurseVar([cls1Spec, cls2Spec, pred], (v, k, ...parent) => {
+            let r;
+            if (OB.is_ob(v)) {
+                r = new Reactive(v);
+            }
+            if (r || (r = Reactive.is_r(v))) {
+                if (!Reactive.is_reactive(r)) {
+                    r.connect(el, k, cb, parent.length ? parent[0][1] : null);
+                }
+                return true;
+            }
+        });
+        return cb();
     };
     function _cls(el, cls1Spec, cls2Spec, pred, attr) {
         return _clsInner(el, cls1Spec, 'classList', attr, cls2Spec, pred);
     }
-    const _clsInner = useReactive((el, cls1Spec, k, attr, cls2Spec, pred, ...xtra) => {
+    const _clsInner = (el, cls1Spec, k, attr, cls2Spec, pred, ...xtra) => {
         if (typeof cls2Spec === 'function' || typeof cls2Spec == 'boolean') {
             pred = cls2Spec;
             cls2Spec = undefined;
@@ -748,17 +774,21 @@ export function B(opts = { root: null, parser: null }) {
             : true;
         pred = typeof pred === 'boolean' ? pred : defaultPredicate;
         for (const cls of cls1) {
+            if (cls === undefined || cls === null)
+                continue;
             const predVal = typeof pred === 'function' ? pred(el, cls) : pred;
             b.setClass(el, cls, predVal);
         }
         if (!cls2 || !cls2.length)
             return;
         for (const cls of cls2) {
+            if (cls === undefined || cls === null)
+                continue;
             const predVal = typeof pred === 'function' ? pred(el, cls) : !pred;
             b.setClass(el, cls, predVal);
             continue;
         }
-    });
+    };
     b.B = B;
     b.ob = B.ob;
     b.r = B.r;
@@ -814,14 +844,16 @@ class Reactive {
     }
     call(el, k, attrs, ...xtra) {
         Reactive.running = this;
+        console.log(`Calling reactive ${this.id} for ${el.id} ${k}`);
         const v = OB.is_ob(this.cb) ? this.cb.value : this.cb(el, k, attrs, ...xtra);
         Reactive.running = null;
         return v;
     }
-    use(el, k, cb, attrs, ...xtra) {
+    connect(el, k, cb, attrs, ...xtra) {
         if (!(el.id in this.to)) {
             this.to[el.id] = { el, k, attrs, xtra, cbs: [] };
         }
+        console.log(`Connecting ${el.id} ${k} to ${this.id}`);
         if (attrs && k)
             attrs[k] = new Proxy(this, {
                 get(target, prop, receiver) {
@@ -1121,7 +1153,7 @@ B.recurseVar = (var_, cb, key, ...parent) => {
         }
         return;
     }
-    if (typeof var_ === 'object') {
+    if (var_ && typeof var_ === 'object') {
         if (cb(var_, key, ...parent)) {
             return;
         }
@@ -1132,6 +1164,27 @@ B.recurseVar = (var_, cb, key, ...parent) => {
     if (cb(var_, key)) {
         return;
     }
+};
+B.clone = (obj, cb, ...parent) => {
+    if (cb) {
+        obj = cb(obj, ...parent);
+    }
+    if (obj === undefined || obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    if (obj instanceof Date) {
+        return new Date(obj.getTime());
+    }
+    if (Array.isArray(obj)) {
+        return obj.map((item) => B.clone(item, cb, obj, ...parent));
+    }
+    const clonedObj = {};
+    for (let key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            clonedObj[key] = B.clone(obj[key], cb, obj, ...parent);
+        }
+    }
+    return clonedObj;
 };
 export function* arrayChunk(arr, size) {
     if (size <= 0)
