@@ -24,7 +24,7 @@ else
   pug -b ${OUT_DIR} ${OUT_DIR} &
 fi
 
-cp ./b.js ./b.js.map ./${OUT_DIR}
+cp ./b.js ./b.js.map ./b.ts ./${OUT_DIR}
 
 for file in $(find ./${OUT_DIR} -name "*.less"); do 
   lessc --include-path=./${OUT_DIR} "$file" "${file%.less}.css" &
