@@ -176,6 +176,25 @@ const HTML_TAGS = [
   'wbr',
 ]
 
+const IDProxy = (target: any, ids?: any): any =>
+  new Proxy(target, {
+    get(t: any, p: string, r: any) {
+      ids = ids || { __is_ids: true, classes: [] }
+      if (p.startsWith('$') || p.startsWith('#')) {
+        ids.id = p.substring(1)
+      } else {
+        ids.classes.push(p)
+      }
+      return IDProxy(t, ids)
+    },
+    apply: (target, thisArg, argumentsList) => {
+      if (ids) {
+        return Reflect.apply(target, thisArg, [ids].concat(argumentsList))
+      }
+      return Reflect.apply(target, thisArg, argumentsList)
+    },
+  })
+
 type None = undefined | null
 type PredicateFunc = (el: HTMLElement, c: string) => boolean
 type ElemListSpec = string | HTMLElement[]
@@ -400,8 +419,8 @@ export function B(opts = { root: null, parser: null }): any {
       if (!p.length) {
         return b.elem(tag)
       }
-      let ids = ''
-      if (typeof p[0] === 'string') {
+      let ids
+      if (p[0] && typeof p[0] === 'object' && p[0]['__is_ids']) {
         ids = p.shift()
       }
       const isAttrs =
@@ -418,11 +437,8 @@ export function B(opts = { root: null, parser: null }): any {
       if (isAttrs) {
         attrs = p.shift()
       }
-      if (ids.length) {
-        attrs = B.setClsString(
-          OB.is_ob(attrs) ? (attrs as OB).value : attrs,
-          ids,
-        )
+      if (ids) {
+        attrs = setClsAndID(attrs, ids)
       }
 
       const isInnerHTML =
@@ -436,8 +452,8 @@ export function B(opts = { root: null, parser: null }): any {
       }
       return b.elem(tag, attrs, ...p)
     }
-    elems[tag as keyof typeof elems] = tagFunc
-    b[tag as keyof typeof b] = tagFunc
+    elems[tag as keyof typeof elems] = IDProxy(tagFunc)
+    b[tag as keyof typeof b] = IDProxy(tagFunc)
   }
 
   b.elems = elems
@@ -940,7 +956,6 @@ export function B(opts = { root: null, parser: null }): any {
   b.isBrowser = B.isBrowser
   b.escapeHTML = B.escapeHTML
   b.splitClsString = B.splitClsString
-  b.setClsString = B.setClsString
   b.debounce = B.debounce
   b.throttle = B.throttle
   b.allowProp = B.allowProp
@@ -1096,32 +1111,29 @@ B.escapeHTML = (unsafe: string) => {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
 }
+
 B.splitClsString = (cls: string): string[] => {
   return cls
     .split(/[\s,]+/)
     .map((x) => x.trim())
     .filter((x) => x != '')
 }
-B.setClsString = (attrs: any, ids: string) => {
-  for (const id of B.splitClsString(ids)) {
-    if (id.startsWith('#')) {
-      if (attrs.id) {
-        throw new Error(
-          `Object already has an ID ${attrs.id}.  Tried to set to ${id}`,
-        )
-      }
-      attrs.id = id.substring(1)
-      continue
-    }
 
-    if (id.startsWith('.')) {
-      if (attrs.class === null || attrs.class === undefined) {
-        attrs.class = ''
-      }
-      attrs.class += ` ${id.substring(1)}`
+function setClsAndID(attrs: any, ids: any) {
+  if (ids.id) {
+    if (attrs.id) {
+      throw new Error(
+        `Object already has an ID ${attrs.id}.  Tried to set to ${ids.id}`,
+      )
     }
+    attrs.id = ids.id
   }
-  if (!attrs.id) attrs.id = B.uuid()
+  if (ids.classes.length) {
+    if (!attrs.classAppend) {
+      attrs.classAppend = []
+    }
+    attrs.classAppend = attrs.classAppend.concat(ids.classes)
+  }
   return attrs
 }
 

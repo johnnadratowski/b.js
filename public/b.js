@@ -174,6 +174,24 @@ const HTML_TAGS = [
     'video',
     'wbr',
 ];
+const IDProxy = (target, ids) => new Proxy(target, {
+    get(t, p, r) {
+        ids = ids || { __is_ids: true, classes: [] };
+        if (p.startsWith('$') || p.startsWith('#')) {
+            ids.id = p.substring(1);
+        }
+        else {
+            ids.classes.push(p);
+        }
+        return IDProxy(t, ids);
+    },
+    apply: (target, thisArg, argumentsList) => {
+        if (ids) {
+            return Reflect.apply(target, thisArg, [ids].concat(argumentsList));
+        }
+        return Reflect.apply(target, thisArg, argumentsList);
+    },
+});
 const isBrowser = typeof window !== 'undefined';
 function getRoot(opts) {
     let root;
@@ -343,8 +361,8 @@ export function B(opts = { root: null, parser: null }) {
             if (!p.length) {
                 return b.elem(tag);
             }
-            let ids = '';
-            if (typeof p[0] === 'string') {
+            let ids;
+            if (p[0] && typeof p[0] === 'object' && p[0]['__is_ids']) {
                 ids = p.shift();
             }
             const isAttrs = p.length &&
@@ -359,8 +377,8 @@ export function B(opts = { root: null, parser: null }) {
             if (isAttrs) {
                 attrs = p.shift();
             }
-            if (ids.length) {
-                attrs = B.setClsString(OB.is_ob(attrs) ? attrs.value : attrs, ids);
+            if (ids) {
+                attrs = setClsAndID(attrs, ids);
             }
             const isInnerHTML = p.length &&
                 p[0] !== null &&
@@ -371,8 +389,8 @@ export function B(opts = { root: null, parser: null }) {
             }
             return b.elem(tag, attrs, ...p);
         };
-        elems[tag] = tagFunc;
-        b[tag] = tagFunc;
+        elems[tag] = IDProxy(tagFunc);
+        b[tag] = IDProxy(tagFunc);
     }
     b.elems = elems;
     b.escape = B.escapeHTML;
@@ -795,7 +813,6 @@ export function B(opts = { root: null, parser: null }) {
     b.isBrowser = B.isBrowser;
     b.escapeHTML = B.escapeHTML;
     b.splitClsString = B.splitClsString;
-    b.setClsString = B.setClsString;
     b.debounce = B.debounce;
     b.throttle = B.throttle;
     b.allowProp = B.allowProp;
@@ -929,26 +946,21 @@ B.splitClsString = (cls) => {
         .map((x) => x.trim())
         .filter((x) => x != '');
 };
-B.setClsString = (attrs, ids) => {
-    for (const id of B.splitClsString(ids)) {
-        if (id.startsWith('#')) {
-            if (attrs.id) {
-                throw new Error(`Object already has an ID ${attrs.id}.  Tried to set to ${id}`);
-            }
-            attrs.id = id.substring(1);
-            continue;
+function setClsAndID(attrs, ids) {
+    if (ids.id) {
+        if (attrs.id) {
+            throw new Error(`Object already has an ID ${attrs.id}.  Tried to set to ${ids.id}`);
         }
-        if (id.startsWith('.')) {
-            if (attrs.class === null || attrs.class === undefined) {
-                attrs.class = '';
-            }
-            attrs.class += ` ${id.substring(1)}`;
-        }
+        attrs.id = ids.id;
     }
-    if (!attrs.id)
-        attrs.id = B.uuid();
+    if (ids.classes.length) {
+        if (!attrs.classAppend) {
+            attrs.classAppend = [];
+        }
+        attrs.classAppend = attrs.classAppend.concat(ids.classes);
+    }
     return attrs;
-};
+}
 B.debounce = (func, timeout = 300) => {
     let timer;
     return (...args) => {

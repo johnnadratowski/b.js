@@ -4,10 +4,8 @@ let name = b.ob('')
 let disableClick = b.ob(false)
 
 b.body.build(({ div, h1, button }) =>
-  div(
-    '#main',
-    button(
-      '#button',
+  div.$main(
+    button.$button(
       {
         onclick: b.r(() =>
           disableClick.value
@@ -21,14 +19,14 @@ b.body.build(({ div, h1, button }) =>
           cls: true,
           disabled: disableClick,
         },
+        disabled: disableClick,
         style: {
           color: b.r(() => (disableClick.value ? 'red' : 'black')),
         },
       },
       b.r(() => `Set Name${name.value ? ', ' + b.capitalize(name.value) : ''}`),
     ),
-    button(
-      '#reset-button',
+    button['#reset-button'](
       {
         onclick() {
           disableClick.value = false
@@ -37,8 +35,7 @@ b.body.build(({ div, h1, button }) =>
       },
       'Reset',
     ),
-    h1(
-      '#header',
+    h1.$header(
       {
         style: {
           display: b.r(() =>
@@ -48,8 +45,7 @@ b.body.build(({ div, h1, button }) =>
       },
       name,
     ),
-    // div(
-    //   '#content',
+    // div.$content(
     //   { style: { color: 'red' } },
     //   'Your Content Goes Here',
     //   div('#section', { style: { color: 'blue' } }, 'Your Section Goes Here'),
