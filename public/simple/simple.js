@@ -16,7 +16,6 @@ b.body.build(({ div, h1, button }) =>
               },
         ),
         class: {
-          cls: true,
           disabled: disableClick,
         },
         disabled: disableClick,
