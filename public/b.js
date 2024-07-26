@@ -240,8 +240,17 @@ export function B(opts = { root: null, parser: null }) {
         if (!parent) {
             throw new Error(`Could not find el for b`, parent);
         }
-        function getChildren(cb) {
-            let children = typeof cb === 'function' ? cb(b.elems) : cb;
+        function getChildren(idx, ...children) {
+            let out = [];
+            for (const child of children) {
+                const new_ = getChild(child);
+                idx += new_.length;
+                out = out.concat(new_);
+            }
+            return out;
+        }
+        function getChild(child) {
+            let children = typeof child === 'function' ? child(b.elems) : child;
             if (children == null || children == undefined) {
                 children = [];
             }
@@ -252,21 +261,15 @@ export function B(opts = { root: null, parser: null }) {
         }
         function build(...p) {
             let where = 'beforeend';
-            if (typeof p[0] === 'string') {
+            if (['beforeend', 'afterbegin', 'replace'].includes(p[0])) {
                 where = p.shift();
             }
-            let cb = p[0];
-            let default_ = p.length > 1 ? p[1] : null;
-            let children = getChildren(cb);
-            if (!children.length && default_) {
-                children = getChildren(default_);
-            }
             if (where === 'replace') {
-                if (children && children.length) {
-                    parent.innerHTML = '';
-                }
+                parent.innerHTML = '';
                 where = 'beforeend';
             }
+            const idx = where == 'beforeend' ? parent.children.length : 0;
+            let children = getChildren(idx, ...p);
             return {
                 children: b.add(where, parent, ...children),
                 el: parent,
