@@ -285,29 +285,6 @@ export function B(opts = { root: null, parser: null }): any {
       throw new Error(`Could not find el for b`, parent)
     }
 
-    function getChildren(idx: number, ...children: any) {
-      let out: any[] = []
-      for (const child of children) {
-        const new_ = getChild(child)
-        idx += new_.length
-        out = out.concat(new_)
-      }
-      return out
-    }
-
-    function getChild(child: any) {
-      let children = typeof child === 'function' ? child(b.elems) : child
-      if (children == null || children == undefined) {
-        children = []
-      }
-      if (typeof children === 'string') {
-        children = Array.from(
-          b.elems['div']({ innerHTML: children }).children(),
-        )
-      }
-      return !Array.isArray(children) ? [children] : children
-    }
-
     function build(...p: any) {
       let where = 'beforeend'
       if (['beforeend', 'afterbegin', 'replace'].includes(p[0])) {
@@ -320,7 +297,7 @@ export function B(opts = { root: null, parser: null }): any {
       }
 
       const idx = where == 'beforeend' ? parent.children.length : 0
-      let children = getChildren(idx, ...p)
+      let children = getChildren(parent, idx, ...p)
 
       return {
         children: b.add(where as InsertPosition, parent, ...children),
@@ -448,6 +425,7 @@ export function B(opts = { root: null, parser: null }): any {
         p.length &&
         p[0] !== null &&
         p[0] !== undefined &&
+        !Reactive.is_if(p[0]) &&
         (typeof p[0] === 'string' || Reactive.is_r(p[0]) || OB.is_ob(p[0]))
 
       if (isInnerHTML) {
@@ -463,16 +441,91 @@ export function B(opts = { root: null, parser: null }): any {
 
   b.escape = B.escapeHTML
 
+  function getChildren(
+    parent: HTMLElement,
+    startIdx: number,
+    ...children: any
+  ) {
+    const startIdxs: number[] = []
+    const childrens: any[] = []
+    const childData = { startIdx, startIdxs, childrens }
+    let out: any[] = []
+    let curIdx = startIdx
+    for (const [childIdx, child] of children.entries()) {
+      const child = children[childIdx]
+      const new_ = getChild(parent, childData, childIdx, child)
+      childrens.push(new_)
+      if (!new_) {
+        startIdxs.push(curIdx)
+        continue
+      }
+
+      curIdx += new_.length
+      startIdxs.push(curIdx)
+      out = out.concat(new_)
+    }
+    return out
+  }
+
+  function getChild(
+    parent: HTMLElement,
+    childData: any,
+    childIdx: any,
+    child: any,
+  ) {
+    if (!child) return null
+    if (Reactive.is_if(child)) {
+      const cb = () => {
+        if (childData.childrens[childIdx]) {
+          for (const toRemove of childData.childrens[childIdx]) {
+            toRemove.remove()
+          }
+          childData.childrens[childIdx] = []
+        }
+
+        const nextIdx: any =
+          childIdx == 0 ? childData.startIdx : childData.startIdxs[childIdx - 1]
+        if (!child.call(parent, `child-${childIdx}`)) {
+          childData.startIdxs[childIdx] = nextIdx
+          return
+        }
+        childData.childrens[childIdx] = _getChild(child)
+        childData.startIdxs[childIdx] =
+          nextIdx + childData.childrens[childIdx].length
+        for (const [idx, grandChild] of childData.childrens[
+          childIdx
+        ].entries()) {
+          b.insertChildAtIndex(parent, grandChild, nextIdx + (idx as any))
+        }
+      }
+
+      if (!child.connect(parent, `child-${childIdx}`, cb)) {
+        return null
+      }
+    }
+    return _getChild(child)
+  }
+
+  function _getChild(child: any) {
+    if (Reactive.is_if(child)) child = child.child
+
+    let children = typeof child === 'function' ? child(b.elems) : child
+    if (children == null || children == undefined) {
+      children = []
+    }
+    if (typeof children === 'string') {
+      children = Array.from(b.elems['div']({ innerHTML: children }).children())
+    }
+    return !Array.isArray(children) ? [children] : children
+  }
+
   b.add = (
     where: InsertPosition,
     el: HTMLElement,
     ...children: (HTMLElement | (() => HTMLElement))[]
   ) => {
     const toAdd = []
-    for (const c of children) {
-      if (!c) continue
-
-      let child = typeof c === 'function' ? c() : c
+    for (const child of getChildren(el, el.children.length, ...children)) {
       if (!child) continue
 
       if (Array.isArray(child)) {
@@ -956,6 +1009,7 @@ export function B(opts = { root: null, parser: null }): any {
   b.B = B
   b.ob = B.ob
   b.r = B.r
+  b.if = B.if
   b.isBrowser = B.isBrowser
   b.escapeHTML = B.escapeHTML
   b.splitClsString = B.splitClsString
@@ -978,6 +1032,7 @@ export function B(opts = { root: null, parser: null }): any {
   b.asyncUntil = B.asyncUntil
   b.arrayToObj = B.arrayToObj
   b.recurseVar = B.recurseVar
+  b.insertChildAtIndex = B.insertChildAtIndex
   b.arrayChunk = B.arrayChunk
   b.root = b(root)
   b.document = b.root
@@ -1003,6 +1058,10 @@ class Reactive {
     )
     this.cb = cb
     this.id = B.uuid()
+  }
+
+  static is_if(v: any): boolean {
+    return v?.__is_if ?? false
   }
 
   static is_r(v: any): Reactive | null {
@@ -1047,10 +1106,11 @@ class Reactive {
   react(ob: OB, newV: any, oldV: any) {
     for (const key of Object.keys(this.to)) {
       const { el, k, attrs, xtra, cbs } = this.to[key]
-      if (!el.isConnected) {
-        delete this.to[key]
-        continue
-      }
+      // TODO: Cleanup removed elements
+      // if (!el.isConnected) {
+      //   delete this.to[key]
+      //   continue
+      // }
       for (const cb of cbs) {
         cb(
           el,
@@ -1069,6 +1129,18 @@ class Reactive {
 
 B.r = (cb: any): Reactive => {
   return new Reactive(cb)
+}
+
+B.if = (cb: any, child: any): Reactive => {
+  return new Proxy(new Reactive(cb), {
+    get(target, prop, receiver) {
+      if (prop === '__is_if') return true
+      if (prop === '__reactive') return true
+      if (prop === 'child') return child
+      // @ts-ignore
+      return Reflect.get(...arguments)
+    },
+  })
 }
 
 class OB {
@@ -1376,8 +1448,8 @@ B.recurseVar = (var_: any, cb: any, key?: any, ...parent: any) => {
     if (cb(var_, key, ...parent)) {
       return
     }
-    for (const i in var_) {
-      B.recurseVar(var_[i], cb, i, [key, var_], ...parent)
+    for (const [i, obj] of var_.entries()) {
+      B.recurseVar(obj, cb, i, [key, var_], ...parent)
     }
     return
   }
@@ -1386,7 +1458,7 @@ B.recurseVar = (var_: any, cb: any, key?: any, ...parent: any) => {
     if (cb(var_, key, ...parent)) {
       return
     }
-    for (const k of Object.keys(var_)) {
+    for (const k in var_) {
       B.recurseVar(var_[k], cb, k, [key, var_], ...parent)
     }
   }
@@ -1420,6 +1492,15 @@ B.clone = (obj: any, cb?: any, ...parent: any[]): any => {
   }
 
   return clonedObj
+}
+
+B.insertChildAtIndex = (el: HTMLElement, child: any, index: number) => {
+  if (!index) index = 0
+  if (index >= el.children.length) {
+    el.appendChild(child)
+  } else {
+    el.insertBefore(child, el.children[index])
+  }
 }
 
 export function* arrayChunk(arr: any[], size: number): any {

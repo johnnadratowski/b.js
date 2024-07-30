@@ -34,16 +34,7 @@ b.body.build(({ div, h1, button }) =>
       },
       'Reset',
     ),
-    h1.$header(
-      {
-        style: {
-          display: b.r(() =>
-            name.value && name.value !== 'UNKNOWN' ? 'block' : 'none',
-          ),
-        },
-      },
-      name,
-    ),
+    b.if(disableClick, h1.$header(name)),
     // div.$content(
     //   { style: { color: 'red' } },
     //   'Your Content Goes Here',

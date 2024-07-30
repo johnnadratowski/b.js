@@ -240,25 +240,6 @@ export function B(opts = { root: null, parser: null }) {
         if (!parent) {
             throw new Error(`Could not find el for b`, parent);
         }
-        function getChildren(idx, ...children) {
-            let out = [];
-            for (const child of children) {
-                const new_ = getChild(child);
-                idx += new_.length;
-                out = out.concat(new_);
-            }
-            return out;
-        }
-        function getChild(child) {
-            let children = typeof child === 'function' ? child(b.elems) : child;
-            if (children == null || children == undefined) {
-                children = [];
-            }
-            if (typeof children === 'string') {
-                children = Array.from(b.elems['div']({ innerHTML: children }).children());
-            }
-            return !Array.isArray(children) ? [children] : children;
-        }
         function build(...p) {
             let where = 'beforeend';
             if (['beforeend', 'afterbegin', 'replace'].includes(p[0])) {
@@ -269,7 +250,7 @@ export function B(opts = { root: null, parser: null }) {
                 where = 'beforeend';
             }
             const idx = where == 'beforeend' ? parent.children.length : 0;
-            let children = getChildren(idx, ...p);
+            let children = getChildren(parent, idx, ...p);
             return {
                 children: b.add(where, parent, ...children),
                 el: parent,
@@ -386,6 +367,7 @@ export function B(opts = { root: null, parser: null }) {
             const isInnerHTML = p.length &&
                 p[0] !== null &&
                 p[0] !== undefined &&
+                !Reactive.is_if(p[0]) &&
                 (typeof p[0] === 'string' || Reactive.is_r(p[0]) || OB.is_ob(p[0]));
             if (isInnerHTML) {
                 attrs.innerHTML = p.shift();
@@ -397,12 +379,70 @@ export function B(opts = { root: null, parser: null }) {
     }
     b.elems = elems;
     b.escape = B.escapeHTML;
+    function getChildren(parent, startIdx, ...children) {
+        const startIdxs = [];
+        const childrens = [];
+        const childData = { startIdx, startIdxs, childrens };
+        let out = [];
+        let curIdx = startIdx;
+        for (const [childIdx, child] of children.entries()) {
+            const child = children[childIdx];
+            const new_ = getChild(parent, childData, childIdx, child);
+            childrens.push(new_);
+            if (!new_) {
+                startIdxs.push(curIdx);
+                continue;
+            }
+            curIdx += new_.length;
+            startIdxs.push(curIdx);
+            out = out.concat(new_);
+        }
+        return out;
+    }
+    function getChild(parent, childData, childIdx, child) {
+        if (!child)
+            return null;
+        if (Reactive.is_if(child)) {
+            const cb = () => {
+                if (childData.childrens[childIdx]) {
+                    for (const toRemove of childData.childrens[childIdx]) {
+                        toRemove.remove();
+                    }
+                    childData.childrens[childIdx] = [];
+                }
+                const nextIdx = childIdx == 0 ? childData.startIdx : childData.startIdxs[childIdx - 1];
+                if (!child.call(parent, `child-${childIdx}`)) {
+                    childData.startIdxs[childIdx] = nextIdx;
+                    return;
+                }
+                childData.childrens[childIdx] = _getChild(child);
+                childData.startIdxs[childIdx] =
+                    nextIdx + childData.childrens[childIdx].length;
+                for (const [idx, grandChild] of childData.childrens[childIdx].entries()) {
+                    b.insertChildAtIndex(parent, grandChild, nextIdx + idx);
+                }
+            };
+            if (!child.connect(parent, `child-${childIdx}`, cb)) {
+                return null;
+            }
+        }
+        return _getChild(child);
+    }
+    function _getChild(child) {
+        if (Reactive.is_if(child))
+            child = child.child;
+        let children = typeof child === 'function' ? child(b.elems) : child;
+        if (children == null || children == undefined) {
+            children = [];
+        }
+        if (typeof children === 'string') {
+            children = Array.from(b.elems['div']({ innerHTML: children }).children());
+        }
+        return !Array.isArray(children) ? [children] : children;
+    }
     b.add = (where, el, ...children) => {
         const toAdd = [];
-        for (const c of children) {
-            if (!c)
-                continue;
-            let child = typeof c === 'function' ? c() : c;
+        for (const child of getChildren(el, el.children.length, ...children)) {
             if (!child)
                 continue;
             if (Array.isArray(child)) {
@@ -813,6 +853,7 @@ export function B(opts = { root: null, parser: null }) {
     b.B = B;
     b.ob = B.ob;
     b.r = B.r;
+    b.if = B.if;
     b.isBrowser = B.isBrowser;
     b.escapeHTML = B.escapeHTML;
     b.splitClsString = B.splitClsString;
@@ -835,6 +876,7 @@ export function B(opts = { root: null, parser: null }) {
     b.asyncUntil = B.asyncUntil;
     b.arrayToObj = B.arrayToObj;
     b.recurseVar = B.recurseVar;
+    b.insertChildAtIndex = B.insertChildAtIndex;
     b.arrayChunk = B.arrayChunk;
     b.root = b(root);
     b.document = b.root;
@@ -855,6 +897,9 @@ class Reactive {
         B.assert(OB.is_ob(cb) || !B.isAsync(cb), 'Cannot use async function in reactive function');
         this.cb = cb;
         this.id = B.uuid();
+    }
+    static is_if(v) {
+        return v?.__is_if ?? false;
     }
     static is_r(v) {
         return v && v.hasOwnProperty('__is_r') ? v : null;
@@ -889,10 +934,11 @@ class Reactive {
     react(ob, newV, oldV) {
         for (const key of Object.keys(this.to)) {
             const { el, k, attrs, xtra, cbs } = this.to[key];
-            if (!el.isConnected) {
-                delete this.to[key];
-                continue;
-            }
+            // TODO: Cleanup removed elements
+            // if (!el.isConnected) {
+            //   delete this.to[key]
+            //   continue
+            // }
             for (const cb of cbs) {
                 cb(el, k, this.call(el, k, attrs, ...xtra, ob, newV, oldV), attrs, ...xtra, ob, newV, oldV);
             }
@@ -901,6 +947,20 @@ class Reactive {
 }
 B.r = (cb) => {
     return new Reactive(cb);
+};
+B.if = (cb, child) => {
+    return new Proxy(new Reactive(cb), {
+        get(target, prop, receiver) {
+            if (prop === '__is_if')
+                return true;
+            if (prop === '__reactive')
+                return true;
+            if (prop === 'child')
+                return child;
+            // @ts-ignore
+            return Reflect.get(...arguments);
+        },
+    });
 };
 class OB {
     __is_ob = true;
@@ -1163,8 +1223,8 @@ B.recurseVar = (var_, cb, key, ...parent) => {
         if (cb(var_, key, ...parent)) {
             return;
         }
-        for (const i in var_) {
-            B.recurseVar(var_[i], cb, i, [key, var_], ...parent);
+        for (const [i, obj] of var_.entries()) {
+            B.recurseVar(obj, cb, i, [key, var_], ...parent);
         }
         return;
     }
@@ -1172,7 +1232,7 @@ B.recurseVar = (var_, cb, key, ...parent) => {
         if (cb(var_, key, ...parent)) {
             return;
         }
-        for (const k of Object.keys(var_)) {
+        for (const k in var_) {
             B.recurseVar(var_[k], cb, k, [key, var_], ...parent);
         }
     }
@@ -1200,6 +1260,16 @@ B.clone = (obj, cb, ...parent) => {
         }
     }
     return clonedObj;
+};
+B.insertChildAtIndex = (el, child, index) => {
+    if (!index)
+        index = 0;
+    if (index >= el.children.length) {
+        el.appendChild(child);
+    }
+    else {
+        el.insertBefore(child, el.children[index]);
+    }
 };
 export function* arrayChunk(arr, size) {
     if (size <= 0)
