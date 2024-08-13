@@ -180,10 +180,12 @@ const IDProxy = (target: any, ids?: any): any =>
   new Proxy(target, {
     get(t: any, p: string, r: any) {
       ids = ids || { __is_ids: true, classes: [] }
-      if (p.startsWith('$') || p.startsWith('#')) {
-        ids.id = p.substring(1)
-      } else {
-        ids.classes.push(p)
+      for (const clss of B.splitClsString(p)) {
+        if (clss.startsWith('$') || clss.startsWith('#')) {
+          ids.id = clss.substring(1)
+        } else {
+          ids.classes.push(clss.replace(/^\.+/, ''))
+        }
       }
       return IDProxy(t, ids)
     },
@@ -256,17 +258,6 @@ export function B(opts = { root: null, parser: null }): any {
       .childNodes[0]
   }
 
-  function insertAdjacentElement(
-    el: HTMLElement,
-    where: InsertPosition,
-    child: HTMLElement,
-  ) {
-    if (el.insertAdjacentElement) {
-      return el.insertAdjacentElement(where, child)
-    }
-    return el.insertAdjacentHTML(where, child.outerHTML)
-  }
-
   function b(parent: any, attrs?: any): any {
     if (!parent) {
       parent = isBrowser
@@ -296,8 +287,7 @@ export function B(opts = { root: null, parser: null }): any {
         where = 'beforeend'
       }
 
-      const idx = where == 'beforeend' ? parent.children.length : 0
-      let children = getChildren(parent, idx, ...p)
+      let children = getChildren(parent, ...p)
 
       return {
         children: b.add(where as InsertPosition, parent, ...children),
@@ -426,6 +416,7 @@ export function B(opts = { root: null, parser: null }): any {
         p[0] !== null &&
         p[0] !== undefined &&
         !Reactive.is_if(p[0]) &&
+        !Reactive.is_for(p[0]) &&
         (typeof p[0] === 'string' || Reactive.is_r(p[0]) || OB.is_ob(p[0]))
 
       if (isInnerHTML) {
@@ -441,27 +432,124 @@ export function B(opts = { root: null, parser: null }): any {
 
   b.escape = B.escapeHTML
 
-  function getChildren(
-    parent: HTMLElement,
-    startIdx: number,
-    ...children: any
-  ) {
-    const startIdxs: number[] = []
-    const childrens: any[] = []
-    const childData = { startIdx, startIdxs, childrens }
-    let out: any[] = []
-    let curIdx = startIdx
-    for (const [childIdx, child] of children.entries()) {
-      const child = children[childIdx]
-      const new_ = getChild(parent, childData, childIdx, child)
-      childrens.push(new_)
-      if (!new_) {
-        startIdxs.push(curIdx)
-        continue
-      }
+  class Children {
+    parent: any
+    children: any[]
 
-      curIdx += new_.length
-      startIdxs.push(curIdx)
+    constructor(parent: any) {
+      this.parent = parent
+      this.children = []
+    }
+
+    startIdx(childIdx: any) {
+      if (!this.children.length) {
+        if (childIdx === 0) {
+          return this.parent.children.length
+        }
+        throw new Error('Getting child start idx before initialization')
+      }
+      if (childIdx - 1 >= this.children.length) {
+        throw new Error('Previous children were not initialized')
+      }
+      if (childIdx <= this.children.length && this.children[childIdx].length) {
+        const idx = Array.from(this.parent.children).indexOf(
+          this.children[childIdx][0],
+        )
+        if (idx > -1) return idx
+      }
+      const prev = this.getPrev(childIdx)
+      if (prev != null) {
+        return Array.from(this.parent.children).indexOf(prev.at(-1)) + 1
+      }
+      const next = this.getNext(childIdx)
+      if (next != null) {
+        return Array.from(this.parent.children).indexOf(next[0]) - 1
+      }
+      return this.parent.children.length
+    }
+
+    getPrev(childIdx: any): any {
+      if (childIdx == 0) return null
+      const prev = this.children[childIdx - 1]
+      if (!prev || !prev.length) {
+        return this.getPrev(childIdx - 1)
+      }
+      return prev
+    }
+
+    getNext(childIdx: any): any {
+      if (childIdx >= this.children.length) return null
+      const next = this.children[childIdx + 1]
+      if (!next || !next.length) {
+        return this.getNext(childIdx + 1)
+      }
+      return next
+    }
+
+    push(children: any) {
+      this.children.push(children)
+    }
+
+    remove(childIdx: any) {
+      if (
+        childIdx < this.children.length &&
+        this.children[childIdx] &&
+        this.children[childIdx].length
+      ) {
+        for (const toRemove of this.children[childIdx]) {
+          toRemove.remove()
+        }
+        this.children[childIdx] = []
+      }
+    }
+
+    removeChild(childIdx: any, innerIdx: any) {
+      const curChildren = this.children[childIdx]
+      const cur = curChildren[innerIdx]
+      curChildren.splice(innerIdx, 1)
+      cur.remove()
+    }
+
+    set(childIdx: any, children: any) {
+      this.children[childIdx] = children
+
+      const startIdx = this.startIdx(childIdx)
+      const entries = this.children[childIdx].entries()
+      for (const [idx, grandChild] of entries) {
+        b.insertChildAtIndex(this.parent, grandChild, startIdx + (idx as any))
+      }
+    }
+
+    setChild(childIdx: any, innerIdx: any, newChild: any) {
+      const curChildren = this.children[childIdx]
+      const old = curChildren[innerIdx]
+      this.parent.replaceChild(newChild, old)
+      curChildren[innerIdx] = newChild
+    }
+
+    replace(childIdx: any, newChildren: any) {
+      this.remove(childIdx)
+      this.set(childIdx, newChildren)
+    }
+
+    insert(childIdx: any, innerIdx: any, newChildren: any) {
+      const curChildren = this.children[childIdx]
+      innerIdx = innerIdx ?? curChildren.length
+      for (const [idx, child] of newChildren.entries()) {
+        b.insertChildAtIndex(this.parent, child, innerIdx + idx)
+        curChildren.splice(innerIdx + idx, 0, child)
+      }
+    }
+  }
+
+  function getChildren(parent: HTMLElement, ...children: any) {
+    const childData = new Children(parent)
+    let out: any[] = []
+    for (const [childIdx, child] of children.entries()) {
+      const new_ = getChild(parent, childData, childIdx, child)
+      childData.push(new_)
+      if (!new_) continue
+
       out = out.concat(new_)
     }
     return out
@@ -476,39 +564,77 @@ export function B(opts = { root: null, parser: null }): any {
     if (!child) return null
     if (Reactive.is_if(child)) {
       const cb = () => {
-        if (childData.childrens[childIdx]) {
-          for (const toRemove of childData.childrens[childIdx]) {
-            toRemove.remove()
-          }
-          childData.childrens[childIdx] = []
-        }
-
-        const nextIdx: any =
-          childIdx == 0 ? childData.startIdx : childData.startIdxs[childIdx - 1]
+        childData.remove(childIdx)
         if (!child.call(parent, `child-${childIdx}`)) {
-          childData.startIdxs[childIdx] = nextIdx
           return
         }
-        childData.childrens[childIdx] = _getChild(child)
-        childData.startIdxs[childIdx] =
-          nextIdx + childData.childrens[childIdx].length
-        for (const [idx, grandChild] of childData.childrens[
-          childIdx
-        ].entries()) {
-          b.insertChildAtIndex(parent, grandChild, nextIdx + (idx as any))
-        }
+
+        childData.set(childIdx, _getChild(parent, childData, child, childIdx))
       }
 
       if (!child.connect(parent, `child-${childIdx}`, cb)) {
         return null
       }
     }
-    return _getChild(child)
+    return _getChild(parent, childData, child, childIdx)
   }
 
-  function _getChild(child: any) {
+  function _getChild(
+    parent: HTMLElement,
+    childData: any,
+    child: any,
+    childIdx: any,
+  ) {
     if (Reactive.is_if(child)) child = child.child
 
+    if (Reactive.is_for(child)) {
+      const cb = (
+        el: any,
+        k: any,
+        v: any,
+        attrs: any,
+        ob: any,
+        newV: any,
+        oldV: any,
+        op: any,
+        where: any,
+        ...args: any[]
+      ) => {
+        switch (true) {
+          case op == 'set' && where !== undefined:
+            childData.setChild(childIdx, where, child.forCB(newV))
+            return
+          case op == 'set':
+            childData.replace(
+              childIdx,
+              newV.map(child.forCB).map(_getChildInner).flat(),
+            )
+            return
+          case op == 'insert':
+            childData.insert(
+              childIdx,
+              where,
+              child.forCB(newV).map(_getChildInner),
+            )
+            return
+          case op == 'remove':
+            childData.removeChild(where)
+            return
+          default:
+            throw new Error(`Unrecognized reaction operation ${op}`)
+        }
+      }
+      return child
+        .connect(parent, `for-${childIdx}`, cb)
+        .map(child.forCB)
+        .map(_getChildInner)
+        .flat()
+    }
+
+    return _getChildInner(child)
+  }
+
+  function _getChildInner(child: any) {
     let children = typeof child === 'function' ? child(b.elems) : child
     if (children == null || children == undefined) {
       children = []
@@ -525,7 +651,7 @@ export function B(opts = { root: null, parser: null }): any {
     ...children: (HTMLElement | (() => HTMLElement))[]
   ) => {
     const toAdd = []
-    for (const child of getChildren(el, el.children.length, ...children)) {
+    for (const child of getChildren(el, ...children)) {
       if (!child) continue
 
       if (Array.isArray(child)) {
@@ -537,7 +663,7 @@ export function B(opts = { root: null, parser: null }): any {
 
     if (toAdd.length) {
       for (const c of toAdd) {
-        insertAdjacentElement(el, where, c)
+        b.insertAdjacent(el, where, c)
       }
     }
     return toAdd
@@ -565,7 +691,7 @@ export function B(opts = { root: null, parser: null }): any {
   }
 
   function useReactive(cb: any) {
-    return (el: any, k?: any, v?: any, attr?: any, ...xtra: any[]) => {
+    return (el: any, k?: any, v?: any, attr?: any) => {
       let r
       if (OB.is_ob(v)) {
         r = new Reactive(v)
@@ -573,11 +699,11 @@ export function B(opts = { root: null, parser: null }): any {
 
       if (r || (r = Reactive.is_r(v))) {
         if (Reactive.is_reactive(r)) {
-          return cb(el, k, r.call(el, k, attr, ...xtra))
+          return cb(el, k, r.call(el, k, attr))
         }
-        return cb(el, k, r.connect(el, k, cb, attr, ...xtra), attr, ...xtra)
+        return cb(el, k, r.connect(el, k, cb, attr), attr)
       }
-      return cb(el, k, v, attr, ...xtra)
+      return cb(el, k, v, attr)
     }
   }
 
@@ -620,6 +746,7 @@ export function B(opts = { root: null, parser: null }): any {
           })
           .join(';')
         setAttr(el, k, style, attr)
+        return
       case k === 'on':
         for (let [innerK, innerV] of Object.entries(v)) {
           if (EVENTS.includes(innerK.toLowerCase())) {
@@ -1010,6 +1137,7 @@ export function B(opts = { root: null, parser: null }): any {
   b.ob = B.ob
   b.r = B.r
   b.if = B.if
+  b.for = B.for
   b.isBrowser = B.isBrowser
   b.escapeHTML = B.escapeHTML
   b.splitClsString = B.splitClsString
@@ -1033,6 +1161,7 @@ export function B(opts = { root: null, parser: null }): any {
   b.arrayToObj = B.arrayToObj
   b.recurseVar = B.recurseVar
   b.insertChildAtIndex = B.insertChildAtIndex
+  b.insertAdjacent = B.insertAdjacent
   b.arrayChunk = B.arrayChunk
   b.root = b(root)
   b.document = b.root
@@ -1047,7 +1176,7 @@ class Reactive {
   static running: any = null
   __is_r = true
   cb: any
-  to: { [key: string]: any } = {}
+  to: any[] = []
   id: string
 
   constructor(cb: any) {
@@ -1058,6 +1187,10 @@ class Reactive {
     )
     this.cb = cb
     this.id = B.uuid()
+  }
+
+  static is_for(v: any): boolean {
+    return v?.__is_for ?? false
   }
 
   static is_if(v: any): boolean {
@@ -1072,7 +1205,7 @@ class Reactive {
     return v?.__reactive ?? false
   }
 
-  call(el: HTMLElement, k: string, attrs?: any, ...xtra: any[]): any {
+  call(el: HTMLElement | OB, k: string, attrs?: any, ...xtra: any[]): any {
     Reactive.running = this
     console.log(`Calling reactive ${this.id} for ${el.id} ${k}`)
     const v = OB.is_ob(this.cb) ? this.cb.value : this.cb(el, k, attrs, ...xtra)
@@ -1080,15 +1213,18 @@ class Reactive {
     return v
   }
 
-  connect(
-    el: HTMLElement,
-    k: string,
-    cb: any,
-    attrs?: any,
-    ...xtra: any[]
-  ): any {
-    if (!(el.id in this.to)) {
-      this.to[el.id] = { el, k, attrs, xtra, cbs: [] }
+  getElTo(el: HTMLElement | OB): any {
+    for (const obj of this.to) {
+      if (obj.el === el) return obj
+    }
+    return null
+  }
+
+  connect(el: HTMLElement | OB, k: string, cb: any, attrs?: any): any {
+    let cur = this.getElTo(el)
+    if (!cur) {
+      cur = { el, k, attrs, cbs: [] }
+      this.to.push(cur)
     }
     console.log(`Connecting ${el.id} ${k} to ${this.id}`)
     if (attrs && k)
@@ -1099,29 +1235,29 @@ class Reactive {
           return Reflect.get(...arguments)
         },
       })
-    this.to[el.id].cbs.push(cb)
-    return this.call(el, k, attrs, ...xtra)
+    cur.cbs.push(cb)
+    return this.call(el, k, attrs)
   }
 
-  react(ob: OB, newV: any, oldV: any) {
-    for (const key of Object.keys(this.to)) {
-      const { el, k, attrs, xtra, cbs } = this.to[key]
-      // TODO: Cleanup removed elements
-      // if (!el.isConnected) {
-      //   delete this.to[key]
-      //   continue
-      // }
+  react(ob: OB, newV: any, oldV: any, operation: string, ...args: any[]) {
+    // TODO: Cleanup removed elements
+    // if (!el.isConnected) {
+    //   delete this.to[key]
+    //   continue
+    // }
+    for (const { el, k, attrs, cbs } of this.to) {
       for (const cb of cbs) {
-        cb(
+        const outVal = this.call(
           el,
           k,
-          this.call(el, k, attrs, ...xtra, ob, newV, oldV),
           attrs,
-          ...xtra,
           ob,
           newV,
           oldV,
+          operation,
+          ...args,
         )
+        cb(el, k, outVal, attrs, ob, newV, oldV, operation, ...args)
       }
     }
   }
@@ -1143,15 +1279,48 @@ B.if = (cb: any, child: any): Reactive => {
   })
 }
 
+B.for = (list: any, forCB: any): Reactive => {
+  if (!OB.is_ob(list)) throw new Error('Must pass OB to for method')
+  if (!Array.isArray(list.value)) throw new Error('Must pass array value OB')
+  return new Proxy(new Reactive(list), {
+    get(target, prop, receiver) {
+      if (prop === '__is_for') return true
+      if (prop === '__reactive') return true
+      if (prop === 'forCB') return forCB
+      // @ts-ignore
+      return Reflect.get(...arguments)
+    },
+  })
+}
+
 class OB {
   __is_ob = true
-  _value = null
+  _value: any = null
+  _id: any = null
   reactives: any = {}
   constructor(value: any) {
+    if (Reactive.is_r(value)) {
+      this._value = value.connect(this, null, (el: any, k: any, v: any) => {
+        this.value = v
+      })
+      return
+    }
     this._value = value
+  }
+
+  get id(): any {
+    if (this._id == undefined) {
+      this._id = B.uuid()
+    }
+    return this._id
   }
   static is_ob(v: any): OB | null {
     return v && v.hasOwnProperty('__is_ob') ? (v as OB) : null
+  }
+  _do_react(newV: any, oldV: any, op: any, ...args: any) {
+    for (const react of Object.values(this.reactives)) {
+      B.any(react).react(this, newV, oldV, op, ...args)
+    }
   }
   get value() {
     if (Reactive.running && !this.reactives[Reactive.running.id]) {
@@ -1160,12 +1329,129 @@ class OB {
     return this._value
   }
   set value(newV: any) {
+    if (newV === this.value) return
     const oldV = this.value
     this._value = newV
-    for (const react of Object.values(this.reactives)) {
-      B.any(react).react(this, newV, oldV)
+    this._do_react(newV, oldV, 'set')
+  }
+  insert(newV: any, where: any) {
+    if (this._value == undefined)
+      throw new Error('Cannot insert into undefined value')
+
+    if (Array.isArray(this._value)) {
+      if (where == undefined) {
+        this._value.push(newV)
+      } else {
+        this._value.splice(where, 0, newV)
+      }
+      this._do_react(newV, this._value, 'insert', where)
+    } else if (typeof this._value === 'object') {
+      B.set(this._value, where, newV, false)
+      this._do_react(newV, this._value, 'insert', where)
+    } else {
+      throw new Error(`Cannot insert to object ${this._value}`)
     }
   }
+  set(newV: any, where: any) {
+    if (this._value == undefined)
+      throw new Error('Cannot set on undefined value')
+
+    if (where == undefined) {
+      this.value = newV
+      return
+    }
+
+    if (typeof this._value !== 'object') {
+      throw new Error(`Cannot set to object ${this._value}`)
+    }
+
+    const oldV = this._value
+    B.set(this._value, where, newV)
+    this._do_react(newV, oldV, 'set', where)
+  }
+  remove(newV: any, where: any) {
+    if (this._value == undefined)
+      throw new Error('Cannot remove from undefined value')
+
+    if (where == undefined) {
+      this.value = undefined
+      return
+    }
+
+    if (typeof this._value !== 'object') {
+      throw new Error(`Cannot set to object ${this._value}`)
+    }
+
+    const removed = B.remove(this._value, where)
+    this._do_react(newV, this._value, 'remove', where, removed)
+  }
+}
+
+function _splitPathString(path: any) {
+  if (typeof path === 'string') {
+    path = path.replace(/\[(\w+)\]/g, '.$1') // convert indexes to properties
+    path = path.replace(/^\./, '') // strip a leading dot
+    path = path.split('.')
+  }
+  return path
+}
+
+B.remove = (obj: any, path: any) => {
+  if (!obj || typeof obj !== 'object') return obj
+
+  path = _splitPathString(path)
+
+  let current = obj
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i]
+
+    if (!current[key] || typeof current[key] !== 'object') {
+      return null
+    }
+    current = current[key]
+  }
+
+  const finalKey = path[path.length - 1]
+
+  let ret
+  if (Array.isArray(current) && !isNaN(finalKey)) {
+    ret = current.splice(finalKey, 1)
+  } else {
+    ret = current[finalKey]
+    delete current[finalKey]
+  }
+
+  return ret
+}
+
+B.set = (obj: any, path: any, value: any, newOnNotExist?: boolean) => {
+  if (!obj || typeof obj !== 'object') return obj
+
+  path = _splitPathString(path)
+
+  let current = obj
+
+  for (let i = 0; i < path.length; i++) {
+    const key = path[i]
+
+    if (i === path.length - 1) {
+      current[key] = value
+      break
+    }
+
+    if (!current[key] || typeof current[key] !== 'object') {
+      if (!newOnNotExist) {
+        throw new Error(
+          `Cannot set object from path: ${path}.  ${key} does not exist`,
+        )
+      }
+      current[key] = {}
+    }
+    current = current[key]
+  }
+
+  return obj
 }
 
 B.ob = (v: any): OB => {
@@ -1499,8 +1785,18 @@ B.insertChildAtIndex = (el: HTMLElement, child: any, index: number) => {
   if (index >= el.children.length) {
     el.appendChild(child)
   } else {
-    el.insertBefore(child, el.children[index])
+    B.insertAdjacent(el.children[index], 'beforebegin', child)
   }
+}
+
+B.insertAdjacent = (el: Element, where: InsertPosition, child: any) => {
+  if (child instanceof HTMLElement) {
+    if (el.insertAdjacentElement) {
+      return el.insertAdjacentElement(where, child)
+    }
+    return el.insertAdjacentHTML(where, child.outerHTML)
+  }
+  return el.insertAdjacentHTML(where, child)
 }
 
 export function* arrayChunk(arr: any[], size: number): any {
