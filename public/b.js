@@ -399,7 +399,9 @@ export function B(opts = { root: null, parser: null }) {
             }
             const prev = this.getPrev(childIdx);
             if (prev != null) {
-                return Array.from(this.parent.children).indexOf(prev.at(-1)) + 1;
+                const idx = Array.from(this.parent.children).indexOf(prev.at(-1)) + 1;
+                if (idx > -1)
+                    return idx;
             }
             const next = this.getNext(childIdx);
             if (next != null) {
