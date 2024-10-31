@@ -179,15 +179,15 @@ const HTML_TAGS = [
 const IDProxy = (target: any, ids?: any): any =>
   new Proxy(target, {
     get(t: any, p: string, r: any) {
-      ids = ids || { __is_ids: true, classes: [] }
+      const new_ids = ids || { __is_ids: true, classes: [] }
       for (const clss of B.splitClsString(p)) {
         if (clss.startsWith('$') || clss.startsWith('#')) {
-          ids.id = clss.substring(1)
+          new_ids.id = clss.substring(1)
         } else {
-          ids.classes.push(clss.replace(/^\.+/, ''))
+          new_ids.classes.push(clss.replace(/^\.+/, ''))
         }
       }
-      return IDProxy(t, ids)
+      return IDProxy(t, new_ids)
     },
     apply: (target, thisArg, argumentsList) => {
       if (ids) {
@@ -511,6 +511,12 @@ export function B(opts = { root: null, parser: null }): any {
       cur.remove()
     }
 
+    removeChildren(childIdx: any, innerIdx: any, cnt: any) {
+      const curChildren = this.children[childIdx]
+      const cur = curChildren.splice(innerIdx, cnt)
+      for (const o of cur) o.remove()
+    }
+
     set(childIdx: any, children: any) {
       this.children[childIdx] = children
 
@@ -539,6 +545,15 @@ export function B(opts = { root: null, parser: null }): any {
       for (const [idx, child] of newChildren.entries()) {
         b.insertChildAtIndex(this.parent, child, innerIdx + idx)
         curChildren.splice(innerIdx + idx, 0, child)
+      }
+    }
+
+    splice(childIdx: any, idx: any, toDelete: any, newChildren?: any) {
+      if (toDelete && toDelete > 0) {
+        this.removeChildren(childIdx, idx, toDelete)
+      }
+      if (newChildren && newChildren.length) {
+        this.insert(childIdx, idx, newChildren)
       }
     }
   }
@@ -615,11 +630,16 @@ export function B(opts = { root: null, parser: null }): any {
             childData.insert(
               childIdx,
               where,
-              child.forCB(newV).map(_getChildInner),
+              Array.isArray(newV)
+                ? newV.map(child.forCB).map(_getChildInner).flat()
+                : child.forCB(newV).map(_getChildInner),
             )
             return
           case op == 'remove':
-            childData.removeChild(where)
+            childData.removeChild(childIdx, where)
+            return
+          case op == 'splice':
+            childData.splice(childIdx, where, ...args)
             return
           default:
             throw new Error(`Unrecognized reaction operation ${op}`)
@@ -692,7 +712,7 @@ export function B(opts = { root: null, parser: null }): any {
   }
 
   function useReactive(cb: any) {
-    return (el: any, k?: any, v?: any, attr?: any) => {
+    return (el: any, k?: any, v?: any, attr?: any, ...rest: any[]) => {
       let r
       if (OB.is_ob(v)) {
         r = new Reactive(v)
@@ -700,11 +720,11 @@ export function B(opts = { root: null, parser: null }): any {
 
       if (r || (r = Reactive.is_r(v))) {
         if (Reactive.is_reactive(r)) {
-          return cb(el, k, r.call(el, k, attr))
+          return cb(el, k, r.call(el, k, attr, ...rest))
         }
-        return cb(el, k, r.connect(el, k, cb, attr), attr)
+        return cb(el, k, r.connect(el, k, cb, attr), attr, ...rest)
       }
-      return cb(el, k, v, attr)
+      return cb(el, k, v, attr, ...rest)
     }
   }
 
@@ -1341,9 +1361,9 @@ class OB {
 
     if (Array.isArray(this._value)) {
       if (where == undefined) {
-        this._value.push(newV)
+        this._value.push(...newV)
       } else {
-        this._value.splice(where, 0, newV)
+        this._value.splice(where, 0, ...newV)
       }
       this._do_react(newV, this._value, 'insert', where)
     } else if (typeof this._value === 'object') {
@@ -1370,7 +1390,7 @@ class OB {
     B.set(this._value, where, newV)
     this._do_react(newV, oldV, 'set', where)
   }
-  remove(newV: any, where: any) {
+  remove(toRemove: any, where: any) {
     if (this._value == undefined)
       throw new Error('Cannot remove from undefined value')
 
@@ -1383,8 +1403,15 @@ class OB {
       throw new Error(`Cannot set to object ${this._value}`)
     }
 
-    const removed = B.remove(this._value, where)
-    this._do_react(newV, this._value, 'remove', where, removed)
+    B.remove(this._value, where)
+    this._do_react(this._value, this._value, 'remove', where, toRemove)
+  }
+  splice(...args: any) {
+    if (this._value == undefined)
+      throw new Error('Cannot remove from undefined value')
+
+    B.splice(this._value, ...args)
+    this._do_react(this._value, this._value, 'splice', ...args)
   }
 }
 
@@ -1395,6 +1422,13 @@ function _splitPathString(path: any) {
     path = path.split('.')
   }
   return path
+}
+
+B.splice = (...args: any) => {
+  const array = args.shift()
+  if (!Array.isArray(array)) throw new Error('Can only splice an array')
+
+  return array.splice.apply(array, args)
 }
 
 B.remove = (obj: any, path: any) => {
@@ -1455,7 +1489,10 @@ B.set = (obj: any, path: any, value: any, newOnNotExist?: boolean) => {
   return obj
 }
 
-B.ob = (v: any): OB => {
+B.ob = (v: any, rec: boolean): OB => {
+  if (rec) {
+    v = B.clone(v, (o: any) => new OB(o))
+  }
   return new OB(v)
 }
 
@@ -1783,10 +1820,11 @@ B.clone = (obj: any, cb?: any, ...parent: any[]): any => {
 
 B.insertChildAtIndex = (el: HTMLElement, child: any, index: number) => {
   if (!index) index = 0
-  if (index >= el.children.length) {
+  const cur = el.children[index] ?? null
+  if (cur === null) {
     el.appendChild(child)
   } else {
-    B.insertAdjacent(el.children[index], 'beforebegin', child)
+    B.insertAdjacent(cur, 'beforebegin', child)
   }
 }
 

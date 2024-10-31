@@ -18,6 +18,22 @@ B was built because of:
 ...
 
 
+## Add New Example
+
+1. Add to exampleList
+2. Add files
+
+```bash
+# Creating new example from previous
+cp -r ./simple-reactive ./reactive-list
+for f in simple-reactive.*; do
+    ext="${f##*.}"
+    mv "$f" "reactive-list.$ext"
+done
+# To clear them out
+echo "" > ./*
+```
+
 
 ## TODO
 

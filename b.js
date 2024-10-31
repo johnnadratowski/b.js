@@ -176,16 +176,16 @@ const HTML_TAGS = [
 ];
 const IDProxy = (target, ids) => new Proxy(target, {
     get(t, p, r) {
-        ids = ids || { __is_ids: true, classes: [] };
+        const new_ids = ids || { __is_ids: true, classes: [] };
         for (const clss of B.splitClsString(p)) {
             if (clss.startsWith('$') || clss.startsWith('#')) {
-                ids.id = clss.substring(1);
+                new_ids.id = clss.substring(1);
             }
             else {
-                ids.classes.push(clss.replace(/^\.+/, ''));
+                new_ids.classes.push(clss.replace(/^\.+/, ''));
             }
         }
-        return IDProxy(t, ids);
+        return IDProxy(t, new_ids);
     },
     apply: (target, thisArg, argumentsList) => {
         if (ids) {
@@ -446,6 +446,12 @@ export function B(opts = { root: null, parser: null }) {
             curChildren.splice(innerIdx, 1);
             cur.remove();
         }
+        removeChildren(childIdx, innerIdx, cnt) {
+            const curChildren = this.children[childIdx];
+            const cur = curChildren.splice(innerIdx, cnt);
+            for (const o of cur)
+                o.remove();
+        }
         set(childIdx, children) {
             this.children[childIdx] = children;
             const startIdx = this.startIdx(childIdx);
@@ -470,6 +476,14 @@ export function B(opts = { root: null, parser: null }) {
             for (const [idx, child] of newChildren.entries()) {
                 b.insertChildAtIndex(this.parent, child, innerIdx + idx);
                 curChildren.splice(innerIdx + idx, 0, child);
+            }
+        }
+        splice(childIdx, idx, toDelete, newChildren) {
+            if (toDelete && toDelete > 0) {
+                this.removeChildren(childIdx, idx, toDelete);
+            }
+            if (newChildren && newChildren.length) {
+                this.insert(childIdx, idx, newChildren);
             }
         }
     }
@@ -515,10 +529,15 @@ export function B(opts = { root: null, parser: null }) {
                         childData.replace(childIdx, newV.map(child.forCB).map(_getChildInner).flat());
                         return;
                     case op == 'insert':
-                        childData.insert(childIdx, where, child.forCB(newV).map(_getChildInner));
+                        childData.insert(childIdx, where, Array.isArray(newV)
+                            ? newV.map(child.forCB).map(_getChildInner).flat()
+                            : child.forCB(newV).map(_getChildInner));
                         return;
                     case op == 'remove':
-                        childData.removeChild(where);
+                        childData.removeChild(childIdx, where);
+                        return;
+                    case op == 'splice':
+                        childData.splice(childIdx, where, ...args);
                         return;
                     default:
                         throw new Error(`Unrecognized reaction operation ${op}`);
@@ -580,18 +599,18 @@ export function B(opts = { root: null, parser: null }) {
         }
     };
     function useReactive(cb) {
-        return (el, k, v, attr) => {
+        return (el, k, v, attr, ...rest) => {
             let r;
             if (OB.is_ob(v)) {
                 r = new Reactive(v);
             }
             if (r || (r = Reactive.is_r(v))) {
                 if (Reactive.is_reactive(r)) {
-                    return cb(el, k, r.call(el, k, attr));
+                    return cb(el, k, r.call(el, k, attr, ...rest));
                 }
-                return cb(el, k, r.connect(el, k, cb, attr), attr);
+                return cb(el, k, r.connect(el, k, cb, attr), attr, ...rest);
             }
-            return cb(el, k, v, attr);
+            return cb(el, k, v, attr, ...rest);
         };
     }
     const setAttr = useReactive((el, k, v) => {
@@ -1143,10 +1162,10 @@ class OB {
             throw new Error('Cannot insert into undefined value');
         if (Array.isArray(this._value)) {
             if (where == undefined) {
-                this._value.push(newV);
+                this._value.push(...newV);
             }
             else {
-                this._value.splice(where, 0, newV);
+                this._value.splice(where, 0, ...newV);
             }
             this._do_react(newV, this._value, 'insert', where);
         }
@@ -1172,7 +1191,7 @@ class OB {
         B.set(this._value, where, newV);
         this._do_react(newV, oldV, 'set', where);
     }
-    remove(newV, where) {
+    remove(toRemove, where) {
         if (this._value == undefined)
             throw new Error('Cannot remove from undefined value');
         if (where == undefined) {
@@ -1182,8 +1201,14 @@ class OB {
         if (typeof this._value !== 'object') {
             throw new Error(`Cannot set to object ${this._value}`);
         }
-        const removed = B.remove(this._value, where);
-        this._do_react(newV, this._value, 'remove', where, removed);
+        B.remove(this._value, where);
+        this._do_react(this._value, this._value, 'remove', where, toRemove);
+    }
+    splice(...args) {
+        if (this._value == undefined)
+            throw new Error('Cannot remove from undefined value');
+        B.splice(this._value, ...args);
+        this._do_react(this._value, this._value, 'splice', ...args);
     }
 }
 function _splitPathString(path) {
@@ -1194,6 +1219,12 @@ function _splitPathString(path) {
     }
     return path;
 }
+B.splice = (...args) => {
+    const array = args.shift();
+    if (!Array.isArray(array))
+        throw new Error('Can only splice an array');
+    return array.splice.apply(array, args);
+};
 B.remove = (obj, path) => {
     if (!obj || typeof obj !== 'object')
         return obj;
@@ -1238,7 +1269,10 @@ B.set = (obj, path, value, newOnNotExist) => {
     }
     return obj;
 };
-B.ob = (v) => {
+B.ob = (v, rec) => {
+    if (rec) {
+        v = B.clone(v, (o) => new OB(o));
+    }
     return new OB(v);
 };
 B.is_b = (is_b) => {
@@ -1516,11 +1550,12 @@ B.clone = (obj, cb, ...parent) => {
 B.insertChildAtIndex = (el, child, index) => {
     if (!index)
         index = 0;
-    if (index >= el.children.length) {
+    const cur = el.children[index] ?? null;
+    if (cur === null) {
         el.appendChild(child);
     }
     else {
-        B.insertAdjacent(el.children[index], 'beforebegin', child);
+        B.insertAdjacent(cur, 'beforebegin', child);
     }
 };
 B.insertAdjacent = (el, where, child) => {
